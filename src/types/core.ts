@@ -119,6 +119,46 @@ export const ROLE_CATEGORY_MAP: Record<AgentRole, AgentRoleCategory> = {
 
 export type PermissionMode = 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
 
+// Thinking mode for extended reasoning
+export type ThinkingMode = 'none' | 'low' | 'medium' | 'high' | 'max';
+
+// Spawning mode for sub-agents
+export type SpawningMode = 'eager' | 'lazy' | 'on-demand' | 'pooled';
+
+// Agent ID format for sub-agents
+export type AgentIdFormat = 'uuid' | 'sequential' | 'hierarchical';
+
+// Consensus voting method
+export type VotingMethod = 'majority' | 'unanimous' | 'weighted';
+
+// Context revival priority fields
+export type ContextPriorityField = 'goals' | 'progress' | 'errors' | 'decisions';
+
+// Approval actions
+export type ApprovalAction = 'file_writes' | 'file_deletes' | 'shell_commands' | 'external_apis' | 'git_operations';
+
+// Consensus configuration for PAL
+export interface ConsensusConfig {
+  enabled?: boolean;
+  threshold?: number;  // 0-1 percentage
+  votingMethod?: VotingMethod;
+}
+
+// Context revival configuration
+export interface ContextRevivalConfig {
+  enabled?: boolean;
+  maxAge?: number;  // hours
+  priorityFields?: ContextPriorityField[];
+}
+
+// Sub-agent inheritance configuration
+export interface SubAgentInheritance {
+  tools?: boolean;
+  skills?: boolean;
+  permissions?: boolean;
+  guardrails?: boolean;
+}
+
 // Per-capability usage configuration (for skills, mcps, commands)
 export interface CapabilityUsageConfig {
   whenToUse?: string;  // Plain English description of when to use this capability
@@ -174,6 +214,11 @@ export interface SubAgentConfig {
   };
   communication?: 'sync' | 'async' | 'event-driven';
   resultAggregation?: 'merge' | 'first' | 'vote' | 'custom';
+  spawningMode?: SpawningMode;
+  delegationDepth?: number;
+  isolatedContext?: boolean;
+  agentIdFormat?: AgentIdFormat;
+  inheritance?: SubAgentInheritance;
 }
 
 // PAL Orchestration Configuration (Plan-Allocate-Learn)
@@ -192,6 +237,9 @@ export interface PALConfig {
     feedbackLoop?: boolean;
     memoryIntegration?: boolean;
   };
+  palTools?: string[];
+  consensusConfig?: ConsensusConfig;
+  contextRevival?: ContextRevivalConfig;
 }
 
 // Delegation Configuration
@@ -247,6 +295,9 @@ export interface AgentConfig {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  thinkingMode?: ThinkingMode;
+  contextWindow?: number;
+  reservedOutputTokens?: number;
 
   // Capabilities
   tools: string[];
@@ -259,6 +310,9 @@ export interface AgentConfig {
 
   // Permissions
   permissionMode: PermissionMode;
+  disallowedTools?: string[];
+  fileAccessPatterns?: string[];
+  requiresApprovalFor?: ApprovalAction[];
 
   // Prompts
   systemPrompt?: string;

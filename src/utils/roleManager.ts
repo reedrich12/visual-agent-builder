@@ -233,6 +233,65 @@ export const clearVisibilityCache = (): void => {
 // ============================================================================
 
 /**
+ * Locked field rules - defines which fields are locked to specific values for roles
+ */
+export interface LockedFieldRule {
+  field: string;           // Field key (supports dot notation for nested fields)
+  roles: AgentRole[];      // Roles this rule applies to
+  value: unknown;          // Value to lock the field to
+  reason: string;          // Human-readable explanation
+}
+
+export const LOCKED_FIELD_RULES: LockedFieldRule[] = [
+  // Executor role - deterministic behavior
+  {
+    field: 'temperature',
+    roles: ['executor'],
+    value: 0,
+    reason: 'Executors require deterministic behavior (temperature=0)',
+  },
+  {
+    field: 'thinkingMode',
+    roles: ['executor'],
+    value: 'none',
+    reason: 'Executors follow plans precisely without extended reasoning',
+  },
+  // Router role - fast, consistent routing
+  {
+    field: 'temperature',
+    roles: ['router'],
+    value: 0.2,
+    reason: 'Routers need low randomness for consistent task routing',
+  },
+  {
+    field: 'thinkingMode',
+    roles: ['router'],
+    value: 'none',
+    reason: 'Routers need fast inference without extended thinking',
+  },
+  // Monitor role - observational consistency
+  {
+    field: 'temperature',
+    roles: ['monitor'],
+    value: 0.1,
+    reason: 'Monitors require consistent observational behavior',
+  },
+  {
+    field: 'thinkingMode',
+    roles: ['monitor'],
+    value: 'none',
+    reason: 'Monitors need quick, consistent responses',
+  },
+  // Auditor role - balanced review
+  {
+    field: 'temperature',
+    roles: ['auditor'],
+    value: 0.3,
+    reason: 'Auditors need low randomness for consistent reviews',
+  },
+];
+
+/**
  * Get locked fields for a role (fields that cannot be edited)
  */
 export const getLockedFields = (role: AgentRole): Partial<Record<keyof AgentConfig, unknown>> => {
@@ -243,8 +302,31 @@ export const getLockedFields = (role: AgentRole): Partial<Record<keyof AgentConf
  * Check if a specific field is locked for a role
  */
 export const isFieldLocked = (role: AgentRole, fieldKey: string): boolean => {
-  const lockedFields = getLockedFields(role);
-  return fieldKey in lockedFields;
+  return LOCKED_FIELD_RULES.some(
+    rule => rule.field === fieldKey && rule.roles.includes(role)
+  );
+};
+
+/**
+ * Get the locked value for a field if it's locked for this role
+ */
+export const getLockedValue = (role: AgentRole, fieldKey: string): { locked: boolean; value?: unknown; reason?: string } => {
+  const rule = LOCKED_FIELD_RULES.find(
+    r => r.field === fieldKey && r.roles.includes(role)
+  );
+
+  if (rule) {
+    return { locked: true, value: rule.value, reason: rule.reason };
+  }
+
+  return { locked: false };
+};
+
+/**
+ * Get all locked fields for a role with their values and reasons
+ */
+export const getLockedFieldsForRole = (role: AgentRole): LockedFieldRule[] => {
+  return LOCKED_FIELD_RULES.filter(rule => rule.roles.includes(role));
 };
 
 // ============================================================================

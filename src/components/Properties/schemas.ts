@@ -13,6 +13,7 @@ export type FieldType =
   | 'slider'
   | 'checkbox'
   | 'chips'         // Array of tags/chips
+  | 'tags'          // Free-form text tags (similar to chips but no predefined options)
   | 'capabilities'  // Capabilities with browse + "when to use" config
   | 'array'         // Dynamic list of items
   | 'object'        // Nested object editor
@@ -34,7 +35,7 @@ export interface FieldSchema {
   label: string;
   type: FieldType;
   section: string;           // Which section this field belongs to
-  options?: { label: string; value: string; description?: string }[];
+  options?: { label: string; value: string | number; description?: string }[];
   placeholder?: string;
   description?: string;      // Help text / tooltip
   defaultValue?: any;
@@ -47,6 +48,11 @@ export interface FieldSchema {
   dependsOn?: string;        // Dynamic options based on another field
   width?: 'full' | 'half';   // Layout hint
   readonly?: boolean;
+  lockedWhen?: {             // Lock field to specific value based on role
+    roles: string[];         // Roles that trigger the lock
+    value: any;              // Value to lock the field to
+    reason?: string;         // Explanation shown in tooltip
+  };
 }
 
 export interface SectionSchema {
@@ -540,6 +546,59 @@ export const nodeSchemas: Record<NodeType, NodeTypeSchema> = {
         defaultValue: 0.7,
         validation: { min: 0, max: 1 },
         width: 'half',
+        lockedWhen: {
+          roles: ['executor'],
+          value: 0,
+          reason: 'Executors require deterministic behavior (temperature=0)',
+        },
+      },
+      {
+        key: 'thinkingMode',
+        label: 'Thinking Mode',
+        type: 'select',
+        section: 'model',
+        description: 'Extended reasoning depth for complex tasks (increases token usage)',
+        options: [
+          { label: 'None', value: 'none', description: 'Standard inference - fastest' },
+          { label: 'Low', value: 'low', description: 'Light reasoning (~2x tokens)' },
+          { label: 'Medium', value: 'medium', description: 'Moderate reasoning (~4x tokens)' },
+          { label: 'High', value: 'high', description: 'Deep reasoning (~8x tokens)' },
+          { label: 'Max', value: 'max', description: 'Maximum reasoning depth' },
+        ],
+        defaultValue: 'none',
+        width: 'half',
+        lockedWhen: {
+          roles: ['executor', 'router', 'monitor'],
+          value: 'none',
+          reason: 'This role requires standard inference without extended thinking',
+        },
+      },
+      {
+        key: 'contextWindow',
+        label: 'Context Window',
+        type: 'select',
+        section: 'model',
+        description: 'Maximum context size (affects cost and capability)',
+        options: [
+          { label: '8K', value: 8192 },
+          { label: '16K', value: 16384 },
+          { label: '32K', value: 32768 },
+          { label: '64K', value: 65536 },
+          { label: '128K', value: 131072 },
+          { label: '200K', value: 200000 },
+        ],
+        defaultValue: 200000,
+        width: 'half',
+      },
+      {
+        key: 'reservedOutputTokens',
+        label: 'Reserved Output Tokens',
+        type: 'number',
+        section: 'model',
+        description: 'Tokens reserved for response generation',
+        defaultValue: 16000,
+        validation: { min: 1000, max: 64000 },
+        width: 'half',
       },
 
       // === PERMISSIONS SECTION ===
@@ -550,6 +609,39 @@ export const nodeSchemas: Record<NodeType, NodeTypeSchema> = {
         section: 'permissions',
         options: permissionModeOptions,
         defaultValue: 'default',
+      },
+      {
+        key: 'disallowedTools',
+        label: 'Disallowed Tools',
+        type: 'chips',
+        section: 'permissions',
+        description: 'Tools this agent cannot use',
+        options: toolOptions,
+        defaultValue: [],
+      },
+      {
+        key: 'fileAccessPatterns',
+        label: 'File Access Patterns',
+        type: 'tags',
+        section: 'permissions',
+        description: 'Glob patterns for allowed file access (e.g., src/**/*.ts)',
+        placeholder: 'Add pattern...',
+        defaultValue: [],
+      },
+      {
+        key: 'requiresApprovalFor',
+        label: 'Requires Approval For',
+        type: 'chips',
+        section: 'permissions',
+        description: 'Actions that require human approval',
+        options: [
+          { label: 'File Writes', value: 'file_writes' },
+          { label: 'File Deletes', value: 'file_deletes' },
+          { label: 'Shell Commands', value: 'shell_commands' },
+          { label: 'External APIs', value: 'external_apis' },
+          { label: 'Git Operations', value: 'git_operations' },
+        ],
+        defaultValue: [],
       },
 
       // === TOOLS SECTION ===
@@ -678,6 +770,84 @@ export const nodeSchemas: Record<NodeType, NodeTypeSchema> = {
         ],
         defaultValue: 'merge',
       },
+      {
+        key: 'subAgentConfig.spawningMode',
+        label: 'Spawning Mode',
+        type: 'select',
+        section: 'subagent',
+        description: 'How sub-agents are created and managed',
+        options: [
+          { label: 'Eager', value: 'eager', description: 'Pre-spawn all sub-agents' },
+          { label: 'Lazy', value: 'lazy', description: 'Spawn only when needed' },
+          { label: 'On-demand', value: 'on-demand', description: 'Create per-task' },
+          { label: 'Pooled', value: 'pooled', description: 'Use agent pool' },
+        ],
+        defaultValue: 'lazy',
+      },
+      {
+        key: 'subAgentConfig.delegationDepth',
+        label: 'Delegation Depth',
+        type: 'number',
+        section: 'subagent',
+        description: 'Maximum levels of nested delegation (1-5)',
+        defaultValue: 2,
+        validation: { min: 1, max: 5 },
+        width: 'half',
+      },
+      {
+        key: 'subAgentConfig.isolatedContext',
+        label: 'Isolated Context',
+        type: 'checkbox',
+        section: 'subagent',
+        description: 'Sub-agents have isolated memory context',
+        defaultValue: false,
+      },
+      {
+        key: 'subAgentConfig.agentIdFormat',
+        label: 'Agent ID Format',
+        type: 'select',
+        section: 'subagent',
+        description: 'Format for generated sub-agent IDs',
+        options: [
+          { label: 'UUID', value: 'uuid', description: 'Random UUID' },
+          { label: 'Sequential', value: 'sequential', description: 'parent-1, parent-2, ...' },
+          { label: 'Hierarchical', value: 'hierarchical', description: 'parent.child.grandchild' },
+        ],
+        defaultValue: 'hierarchical',
+        width: 'half',
+      },
+      {
+        key: 'subAgentConfig.inheritance.tools',
+        label: 'Inherit Tools',
+        type: 'checkbox',
+        section: 'subagent',
+        description: 'Sub-agents inherit parent tools',
+        defaultValue: true,
+      },
+      {
+        key: 'subAgentConfig.inheritance.skills',
+        label: 'Inherit Skills',
+        type: 'checkbox',
+        section: 'subagent',
+        description: 'Sub-agents inherit parent skills',
+        defaultValue: true,
+      },
+      {
+        key: 'subAgentConfig.inheritance.permissions',
+        label: 'Inherit Permissions',
+        type: 'checkbox',
+        section: 'subagent',
+        description: 'Sub-agents inherit parent permission settings',
+        defaultValue: true,
+      },
+      {
+        key: 'subAgentConfig.inheritance.guardrails',
+        label: 'Inherit Guardrails',
+        type: 'checkbox',
+        section: 'subagent',
+        description: 'Sub-agents inherit parent guardrails',
+        defaultValue: true,
+      },
 
       // === PAL ORCHESTRATION SECTION (coordinator only) ===
       {
@@ -747,6 +917,96 @@ export const nodeSchemas: Record<NodeType, NodeTypeSchema> = {
         description: 'Incorporate learnings into future plans',
         defaultValue: true,
         conditional: { field: 'palConfig.learnPhase.enabled', value: true },
+      },
+      {
+        key: 'palConfig.learnPhase.memoryIntegration',
+        label: 'Memory Integration',
+        type: 'checkbox',
+        section: 'pal',
+        description: 'Store learnings in long-term memory',
+        defaultValue: false,
+        conditional: { field: 'palConfig.learnPhase.enabled', value: true },
+      },
+      {
+        key: 'palConfig.palTools',
+        label: 'PAL Tools',
+        type: 'chips',
+        section: 'pal',
+        description: 'Tools available during PAL orchestration',
+        options: [
+          { label: 'TodoWrite', value: 'TodoWrite' },
+          { label: 'Task', value: 'Task' },
+          { label: 'EnterPlanMode', value: 'EnterPlanMode' },
+          { label: 'ExitPlanMode', value: 'ExitPlanMode' },
+        ],
+        defaultValue: ['TodoWrite', 'Task'],
+      },
+      {
+        key: 'palConfig.consensusConfig.enabled',
+        label: 'Enable Consensus',
+        type: 'checkbox',
+        section: 'pal',
+        description: 'Require agreement from multiple agents',
+        defaultValue: false,
+      },
+      {
+        key: 'palConfig.consensusConfig.threshold',
+        label: 'Consensus Threshold',
+        type: 'slider',
+        section: 'pal',
+        description: 'Percentage of agents that must agree (0-100%)',
+        defaultValue: 0.67,
+        validation: { min: 0.5, max: 1 },
+        width: 'half',
+        conditional: { field: 'palConfig.consensusConfig.enabled', value: true },
+      },
+      {
+        key: 'palConfig.consensusConfig.votingMethod',
+        label: 'Voting Method',
+        type: 'select',
+        section: 'pal',
+        options: [
+          { label: 'Majority', value: 'majority' },
+          { label: 'Unanimous', value: 'unanimous' },
+          { label: 'Weighted', value: 'weighted' },
+        ],
+        defaultValue: 'majority',
+        width: 'half',
+        conditional: { field: 'palConfig.consensusConfig.enabled', value: true },
+      },
+      {
+        key: 'palConfig.contextRevival.enabled',
+        label: 'Enable Context Revival',
+        type: 'checkbox',
+        section: 'pal',
+        description: 'Restore context from previous sessions',
+        defaultValue: false,
+      },
+      {
+        key: 'palConfig.contextRevival.maxAge',
+        label: 'Max Context Age (hours)',
+        type: 'number',
+        section: 'pal',
+        description: 'Maximum age of context to restore',
+        defaultValue: 24,
+        validation: { min: 1, max: 168 },
+        width: 'half',
+        conditional: { field: 'palConfig.contextRevival.enabled', value: true },
+      },
+      {
+        key: 'palConfig.contextRevival.priorityFields',
+        label: 'Priority Fields',
+        type: 'chips',
+        section: 'pal',
+        description: 'Fields to prioritize when restoring context',
+        options: [
+          { label: 'Goals', value: 'goals' },
+          { label: 'Progress', value: 'progress' },
+          { label: 'Errors', value: 'errors' },
+          { label: 'Decisions', value: 'decisions' },
+        ],
+        defaultValue: ['goals', 'progress'],
+        conditional: { field: 'palConfig.contextRevival.enabled', value: true },
       },
 
       // === DELEGATION SECTION (coordinator + team) ===

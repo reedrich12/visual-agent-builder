@@ -37,7 +37,7 @@ export const ChipsField = ({ field, errors, watch, setValue }: ChipsFieldProps) 
   }, [inputValue, chips, addChip, removeChip]);
 
   // If field has predefined options, show them as suggestions
-  const availableOptions = field.options?.filter(opt => !chips.includes(opt.value)) || [];
+  const availableOptions = field.options?.filter(opt => !chips.includes(String(opt.value))) || [];
 
   return (
     <div className="space-y-1">
@@ -99,7 +99,7 @@ export const ChipsField = ({ field, errors, watch, setValue }: ChipsFieldProps) 
             <button
               key={opt.value}
               type="button"
-              onClick={() => addChip(opt.value)}
+              onClick={() => addChip(String(opt.value))}
               className="px-2 py-0.5 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
             >
               + {opt.label}

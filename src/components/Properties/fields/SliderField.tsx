@@ -7,9 +7,10 @@ interface SliderFieldProps {
   errors: FieldErrors;
   watch: UseFormWatch<any>;
   setValue: UseFormSetValue<any>;
+  disabled?: boolean;
 }
 
-export const SliderField = ({ field, register, errors, watch }: SliderFieldProps) => {
+export const SliderField = ({ field, register, errors, watch, disabled }: SliderFieldProps) => {
   const error = errors[field.key];
   const currentValue = watch(field.key) ?? field.defaultValue ?? field.validation?.min ?? 0;
   const min = field.validation?.min ?? 0;
@@ -19,7 +20,7 @@ export const SliderField = ({ field, register, errors, watch }: SliderFieldProps
   const step = max <= 2 ? 0.1 : max <= 10 ? 0.5 : 1;
 
   return (
-    <div className="space-y-1">
+    <div className={`space-y-1 ${disabled ? 'opacity-60' : ''}`}>
       <div className="flex items-center justify-between">
         <label className="block text-xs font-medium text-gray-600">
           {field.label}
@@ -37,7 +38,8 @@ export const SliderField = ({ field, register, errors, watch }: SliderFieldProps
           min={min}
           max={max}
           step={step}
-          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+          disabled={disabled}
+          className={`flex-1 h-2 bg-gray-200 rounded-lg appearance-none ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} accent-indigo-500`}
         />
         <span className="text-xs text-gray-400 w-8 text-right">{max}</span>
       </div>

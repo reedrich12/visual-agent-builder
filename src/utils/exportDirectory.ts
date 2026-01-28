@@ -200,6 +200,16 @@ export const generateAgentMarkdown = (
   if (config.topP !== undefined && config.topP !== 1.0) {
     lines.push(`topP: ${config.topP}`);
   }
+  // New model fields
+  if (config.thinkingMode && config.thinkingMode !== 'none') {
+    lines.push(`thinkingMode: ${config.thinkingMode}`);
+  }
+  if (config.contextWindow !== undefined && config.contextWindow !== 200000) {
+    lines.push(`contextWindow: ${config.contextWindow}`);
+  }
+  if (config.reservedOutputTokens !== undefined && config.reservedOutputTokens !== 16000) {
+    lines.push(`reservedOutputTokens: ${config.reservedOutputTokens}`);
+  }
 
   // Capabilities
   if (config.tools && config.tools.length > 0) {
@@ -260,6 +270,15 @@ export const generateAgentMarkdown = (
   // Permissions
   if (config.permissionMode && config.permissionMode !== 'default') {
     lines.push(`permissionMode: ${config.permissionMode}`);
+  }
+  if (config.disallowedTools && config.disallowedTools.length > 0) {
+    lines.push(`disallowedTools: [${config.disallowedTools.join(', ')}]`);
+  }
+  if (config.fileAccessPatterns && config.fileAccessPatterns.length > 0) {
+    lines.push(`fileAccessPatterns: [${config.fileAccessPatterns.join(', ')}]`);
+  }
+  if (config.requiresApprovalFor && config.requiresApprovalFor.length > 0) {
+    lines.push(`requiresApprovalFor: [${config.requiresApprovalFor.join(', ')}]`);
   }
 
   // === EXTENDED CONFIGURATION SECTIONS ===

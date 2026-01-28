@@ -17,6 +17,7 @@ import {
 } from './fields';
 import useStore from '../../store/useStore';
 import { AgentRole, AgentRoleCategory, ROLE_CATEGORY_MAP } from '../../types/core';
+import { getLockedValue } from '../../utils/roleManager';
 
 interface DynamicFormProps {
   node: Node;
@@ -107,6 +108,18 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
       if (currentCategory !== category) {
         setValue('roleCategory', category);
       }
+
+      // Apply locked field values when role changes
+      const fieldsToCheck = ['temperature', 'thinkingMode'];
+      fieldsToCheck.forEach(fieldKey => {
+        const lockedInfo = getLockedValue(currentRole, fieldKey);
+        if (lockedInfo.locked && lockedInfo.value !== undefined) {
+          const currentValue = watch(fieldKey);
+          if (currentValue !== lockedInfo.value) {
+            setValue(fieldKey, lockedInfo.value);
+          }
+        }
+      });
     }
   }, [currentRole, schema.type, setValue, watch]);
 
@@ -146,10 +159,32 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
     }
   }, [watch]);
 
+  // Check if a field is locked based on current role
+  const getFieldLockedInfo = useCallback((fieldKey: string) => {
+    if (!currentRole) return { isLocked: false };
+    const lockedInfo = getLockedValue(currentRole, fieldKey);
+    return {
+      isLocked: lockedInfo.locked,
+      lockedValue: lockedInfo.value,
+      lockedReason: lockedInfo.reason,
+    };
+  }, [currentRole]);
+
+  // Render locked field indicator
+  const renderLockedIndicator = (reason?: string) => (
+    <div className="flex items-center gap-1 mt-1 text-amber-600">
+      <Lock size={12} />
+      <span className="text-xs">{reason || 'Locked by role'}</span>
+    </div>
+  );
+
   // Render a single field based on its type
   const renderField = (field: FieldSchema) => {
     // Check field-level visibility
     if (!isFieldVisible(field)) return null;
+
+    // Check if field is locked by role
+    const lockedInfo = getFieldLockedInfo(field.key);
 
     // Handle dynamic model options based on provider selection
     let fieldWithOptions = field;
@@ -159,6 +194,11 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
         ...field,
         options: models.map((m) => ({ label: m.label, value: m.value })),
       };
+    }
+
+    // Mark field as readonly if locked
+    if (lockedInfo.isLocked) {
+      fieldWithOptions = { ...fieldWithOptions, readonly: true };
     }
 
     switch (field.type) {
@@ -171,11 +211,7 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
               register={register}
               errors={errors}
             />
-            {field.readonly && (
-              <span title="Locked by role">
-                <Lock size={12} className="absolute top-1 right-1 text-amber-500" />
-              </span>
-            )}
+            {lockedInfo.isLocked && renderLockedIndicator(lockedInfo.lockedReason)}
           </div>
         );
 
@@ -192,12 +228,14 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
 
       case 'select':
         return (
-          <SelectField
-            key={field.key}
-            field={fieldWithOptions}
-            register={register}
-            errors={errors}
-          />
+          <div key={field.key} className="relative">
+            <SelectField
+              field={fieldWithOptions}
+              register={register}
+              errors={errors}
+            />
+            {lockedInfo.isLocked && renderLockedIndicator(lockedInfo.lockedReason)}
+          </div>
         );
 
       case 'roleSelect':
@@ -220,12 +258,9 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
               errors={errors}
               watch={watch}
               setValue={setValue}
+              disabled={lockedInfo.isLocked}
             />
-            {field.readonly && (
-              <span title="Locked by role">
-                <Lock size={12} className="absolute top-1 right-1 text-amber-500" />
-              </span>
-            )}
+            {lockedInfo.isLocked && renderLockedIndicator(lockedInfo.lockedReason)}
           </div>
         );
 
