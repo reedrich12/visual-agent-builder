@@ -15,12 +15,21 @@ import {
 import { EdgeType } from '../types/core';
 import { needsMigration, migrateWorkflow } from '../utils/workflowMigration';
 
+export interface WorkflowConfig {
+  name: string;
+  description: string;
+  framework: 'claude-code' | 'langchain' | 'autogen' | 'custom';
+  skillFormat: 'markdown' | 'yaml' | 'json';
+}
+
 interface StoreState {
   nodes: Node[];
   edges: Edge[];
   selectedNode: Node | null;
   libraryCategory: string;
   addToAgentMode: boolean;
+  workflowConfig: WorkflowConfig;
+  isConfigModalOpen: boolean;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -30,6 +39,9 @@ interface StoreState {
   setSelectedNode: (node: Node | null) => void;
   updateNodeData: (nodeId: string, newData: any) => void;
   setLibraryCategory: (category: string, addToAgentMode?: boolean) => void;
+  // Workflow config
+  setWorkflowConfig: (config: Partial<WorkflowConfig>) => void;
+  setConfigModalOpen: (open: boolean) => void;
   // Hierarchy helpers
   addChildNode: (parentId: string, node: Node) => void;
   moveNodeToParent: (nodeId: string, parentId: string | null) => void;
@@ -44,6 +56,13 @@ const useStore = create<StoreState>((set, get) => ({
   selectedNode: null,
   libraryCategory: 'agents',
   addToAgentMode: false,
+  workflowConfig: {
+    name: 'Untitled Workflow',
+    description: '',
+    framework: 'claude-code',
+    skillFormat: 'markdown',
+  },
+  isConfigModalOpen: false,
 
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -96,6 +115,14 @@ const useStore = create<StoreState>((set, get) => ({
 
   setLibraryCategory: (category, addToAgentMode = false) => {
     set({ libraryCategory: category, addToAgentMode });
+  },
+
+  setWorkflowConfig: (config) => {
+    set({ workflowConfig: { ...get().workflowConfig, ...config } });
+  },
+
+  setConfigModalOpen: (open) => {
+    set({ isConfigModalOpen: open });
   },
 
   // Hierarchy helpers for container nodes (Department, Agent Pool)

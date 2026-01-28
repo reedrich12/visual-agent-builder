@@ -2,14 +2,16 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { Canvas } from './components/Editor/Canvas';
 import { LibraryPanel } from './components/Library/LibraryPanel';
 import { PropertiesPanel } from './components/Properties/PropertiesPanel';
+import { ConfigModal } from './components/ConfigModal';
+import { StatusPanel } from './components/StatusPanel';
 import { fetchInventory } from './services/api';
-import { Zap } from 'lucide-react';
+import { Zap, Settings } from 'lucide-react';
 import useStore from './store/useStore';
 
 const queryClient = new QueryClient();
 
 function AppContent() {
-  const { libraryCategory, setLibraryCategory } = useStore();
+  const { libraryCategory, setLibraryCategory, workflowConfig, setConfigModalOpen } = useStore();
 
   const { data: inventory } = useQuery({
     queryKey: ['inventory'],
@@ -25,50 +27,72 @@ function AppContent() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-slate-100">
       {/* Header */}
-      <header className="h-14 bg-white border-b flex items-center px-4 justify-between z-10 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="bg-indigo-600 p-1.5 rounded text-white">
-            <Zap size={18} fill="currentColor" />
+      <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 justify-between z-20 shrink-0 shadow-sm">
+        {/* Left: Logo & Title */}
+        <div className="flex items-center gap-3">
+          <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-2 rounded-xl shadow-lg shadow-indigo-500/20">
+            <Zap size={20} fill="currentColor" className="text-white" />
           </div>
-          <h1 className="font-bold text-slate-800 text-lg tracking-tight">Visual Agent Builder</h1>
+          <div>
+            <h1 className="font-bold text-slate-800 text-lg tracking-tight">Visual Agent Builder</h1>
+            <p className="text-xs text-slate-500">Design AI workflows visually</p>
+          </div>
         </div>
 
-        {/* Category Tabs */}
-        <div className="flex items-center gap-1">
+        {/* Center: Workflow Name & Settings */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setConfigModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors group"
+          >
+            <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">
+              {workflowConfig.name}
+            </span>
+            <Settings size={14} className="text-slate-400 group-hover:text-slate-600" />
+          </button>
+        </div>
+
+        {/* Right: Category Tabs */}
+        <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200">
           {categories.map(cat => (
             <button
               key={cat}
               onClick={() => handleCategoryTabClick(cat)}
-              className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              className={`px-3 py-1.5 text-sm rounded-md transition-all ${
                 libraryCategory === cat
-                  ? 'bg-indigo-100 text-indigo-700 font-medium'
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-white text-indigo-700 font-medium shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              {cat}
+              {cat.charAt(0).toUpperCase() + cat.slice(1)}
             </button>
           ))}
         </div>
-
-        <div className="text-sm text-slate-500">
-          v0.3.0 (Phase 4 Properties)
-        </div>
       </header>
 
+      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Real Library Panel */}
+        {/* Library Panel */}
         <LibraryPanel />
 
         {/* Canvas Area */}
-        <main className="flex-1 relative bg-slate-50">
+        <main className="flex-1 relative">
           <Canvas />
         </main>
 
-        {/* Real Properties Panel */}
+        {/* Properties Panel */}
         <PropertiesPanel />
       </div>
+
+      {/* Footer Status Bar */}
+      <footer className="h-10 bg-white border-t border-slate-200 flex items-center justify-center px-4 shrink-0">
+        <StatusPanel />
+      </footer>
+
+      {/* Config Modal */}
+      <ConfigModal />
     </div>
   );
 }

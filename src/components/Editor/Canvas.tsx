@@ -5,7 +5,6 @@ import ReactFlow, {
   MiniMap,
   ReactFlowProvider,
   Node,
-  Panel,
   ConnectionMode,
   Connection,
   addEdge,
@@ -258,7 +257,18 @@ const CanvasContent = () => {
   }, []);
 
   return (
-    <div className="flex-grow h-full bg-slate-50 relative" ref={reactFlowWrapper}>
+    <div className="flex-grow h-full relative" ref={reactFlowWrapper}>
+      {/* Canvas Background Pattern */}
+      <div
+        className="absolute inset-0 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 0)
+          `,
+          backgroundSize: '20px 20px',
+        }}
+      />
+
       <Toolbar />
       <ReactFlow
         nodes={nodes}
@@ -274,30 +284,32 @@ const CanvasContent = () => {
         edgeTypes={edgeTypes}
         connectionMode={ConnectionMode.Loose}
         fitView
+        className="bg-transparent"
       >
-        <Background gap={16} size={1} color="#cbd5e1" />
-        <Controls className="bg-white shadow-md border border-slate-200 p-1 rounded-md" />
-        <MiniMap
-            className="border border-slate-200 shadow-lg rounded-lg overflow-hidden"
-            nodeColor={(node) => {
-                switch (node.data.type) {
-                    case 'AGENT': return '#3b82f6';      // blue
-                    case 'SKILL': return '#22c55e';      // green
-                    case 'TOOL': return '#f59e0b';       // amber
-                    case 'PLUGIN': return '#a855f7';     // purple
-                    case 'DEPARTMENT': return '#f97316'; // orange
-                    case 'AGENT_POOL': return '#14b8a6'; // teal
-                    case 'MCP_SERVER': return '#8b5cf6'; // violet
-                    case 'HOOK': return '#ec4899';       // pink
-                    case 'COMMAND': return '#64748b';    // slate
-                    case 'PROVIDER': return '#06b6d4';   // cyan
-                    default: return '#64748b';
-                }
-            }}
+        <Background gap={20} size={1} color="#e2e8f0" />
+        <Controls
+          className="bg-white/95 backdrop-blur-sm shadow-lg border border-slate-200 rounded-xl overflow-hidden"
+          showInteractive={false}
         />
-        <Panel position="bottom-right" className="bg-white/90 p-2 rounded shadow-sm text-xs text-slate-500 border backdrop-blur-sm">
-            {nodes.length} Nodes &bull; {edges.length} Connections
-        </Panel>
+        <MiniMap
+          className="border border-slate-200 shadow-xl rounded-xl overflow-hidden bg-white/95 backdrop-blur-sm"
+          nodeColor={(node) => {
+            switch (node.data.type) {
+              case 'AGENT': return '#3b82f6';
+              case 'SKILL': return '#22c55e';
+              case 'TOOL': return '#f59e0b';
+              case 'PLUGIN': return '#a855f7';
+              case 'DEPARTMENT': return '#f97316';
+              case 'AGENT_POOL': return '#14b8a6';
+              case 'MCP_SERVER': return '#8b5cf6';
+              case 'HOOK': return '#ec4899';
+              case 'COMMAND': return '#64748b';
+              case 'PROVIDER': return '#06b6d4';
+              default: return '#64748b';
+            }
+          }}
+          maskColor="rgba(255, 255, 255, 0.8)"
+        />
       </ReactFlow>
 
       {/* Edge Type Selector Popup */}
