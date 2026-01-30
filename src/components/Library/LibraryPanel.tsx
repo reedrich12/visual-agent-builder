@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchInventory, InventoryItem, BundleComponent } from '../../services/api';
 import {
-  Search,
+  fetchInventory,
+  InventoryItem,
+  BundleComponent,
+  searchInventory as searchInventoryAPI,
+  SearchResult,
+} from '../../services/api';
+import {
   Folder,
   File,
   ChevronRight,
@@ -23,10 +28,13 @@ import {
   Cloud,
   Package,
   GripVertical,
+  Search,
 } from 'lucide-react';
 import { NodeType } from '../../types/core';
 import { BundleCard } from './BundleCard';
 import useStore from '../../store/useStore';
+import { SearchFilters } from './SearchFilters';
+import { BucketView } from './BucketView';
 
 // Map bundle component category to NodeType
 const categoryToNodeType: Record<string, NodeType> = {
@@ -239,14 +247,92 @@ const FileTreeItem = ({ item, level = 0, onDragStart, addMode, isAdded, onAddCli
   );
 };
 
+// Map library category names to node types for search filtering
+const CATEGORY_TO_TYPE_MAP: Record<string, string[]> = {
+  agents: ['AGENT'],
+  skills: ['SKILL'],
+  commands: ['COMMAND'],
+  hooks: ['HOOK'],
+  mcps: ['TOOL', 'MCP_SERVER'],
+  settings: ['PROVIDER'],
+  bundles: ['BUNDLE'],
+};
+
 export const LibraryPanel = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const { libraryCategory, addToAgentMode, setLibraryCategory, selectedNode, updateNodeData } = useStore();
+  const {
+    libraryCategory,
+    addToAgentMode,
+    setLibraryCategory,
+    selectedNode,
+    updateNodeData,
+    libraryFilters,
+    setLibraryFilters,
+    resetLibraryFilters,
+    libraryViewMode,
+    setLibraryViewMode,
+  } = useStore();
+
+  // Search state
+  const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   const { data: inventory, isLoading, error } = useQuery({
     queryKey: ['inventory'],
     queryFn: fetchInventory,
   });
+
+  // Determine if we should use search mode
+  const useSearchMode = libraryFilters.search ||
+    libraryFilters.types.length > 0 ||
+    libraryFilters.repos.length > 0 ||
+    libraryFilters.categories.length > 0 ||
+    libraryFilters.buckets.length > 0 ||
+    libraryFilters.subcategories.length > 0;
+
+  // Perform search when filters change
+  useEffect(() => {
+    if (!useSearchMode) {
+      setSearchResults(null);
+      return;
+    }
+
+    const performSearch = async () => {
+      setIsSearching(true);
+      try {
+        // Build type filter based on category if not global search
+        let typesFilter = libraryFilters.types;
+        if (!libraryFilters.globalSearch && libraryCategory !== 'bundles') {
+          const categoryTypes = CATEGORY_TO_TYPE_MAP[libraryCategory];
+          if (categoryTypes) {
+            // If user selected types, intersect with category types
+            if (typesFilter.length > 0) {
+              typesFilter = typesFilter.filter(t => categoryTypes.includes(t));
+            } else {
+              typesFilter = categoryTypes;
+            }
+          }
+        }
+
+        const result = await searchInventoryAPI({
+          q: libraryFilters.search || undefined,
+          types: typesFilter.length > 0 ? typesFilter : undefined,
+          repos: libraryFilters.repos.length > 0 ? libraryFilters.repos : undefined,
+          categories: libraryFilters.categories.length > 0 ? libraryFilters.categories : undefined,
+          buckets: libraryFilters.buckets.length > 0 ? libraryFilters.buckets : undefined,
+          subcategories: libraryFilters.subcategories.length > 0 ? libraryFilters.subcategories : undefined,
+          limit: 100,
+        });
+        setSearchResults(result);
+      } catch (err) {
+        console.error('Search failed:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const debounce = setTimeout(performSearch, 200);
+    return () => clearTimeout(debounce);
+  }, [libraryFilters, libraryCategory, useSearchMode]);
 
   // Filter inventory to selected category's children
   const filteredInventory = inventory?.find(item => item.name === libraryCategory)?.children || [];
@@ -287,6 +373,18 @@ export const LibraryPanel = () => {
     setLibraryCategory(libraryCategory, false);
   };
 
+  // Handle bucket selection from BucketView
+  const handleBucketSelect = (bucketId: string) => {
+    // Set bucket filter and clear any subcategory filter
+    setLibraryFilters({ buckets: [bucketId], subcategories: [] });
+  };
+
+  // Handle subcategory selection from BucketView
+  const handleSubcategorySelect = (bucketId: string, subcategoryId: string) => {
+    // Set both bucket and subcategory filters
+    setLibraryFilters({ buckets: [bucketId], subcategories: [subcategoryId] });
+  };
+
   // Handle drag for node templates
   const onTemplateDragStart = (event: React.DragEvent, template: NodeTemplate) => {
     event.dataTransfer.setData('application/reactflow', template.type);
@@ -301,6 +399,7 @@ export const LibraryPanel = () => {
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.setData('application/label', item.name);
     event.dataTransfer.setData('application/filepath', item.path);
+    event.dataTransfer.setData('application/repo', item.repo || '');
     event.dataTransfer.effectAllowed = 'move';
   };
 
@@ -308,18 +407,21 @@ export const LibraryPanel = () => {
   const onBundleDragStart = (
     event: React.DragEvent,
     item: InventoryItem | BundleComponent,
-    isBundle?: boolean
+    isBundle?: boolean,
+    parentRepo?: string
   ) => {
     if (isBundle && 'bundleData' in item && item.bundleData) {
       event.dataTransfer.setData('application/reactflow', 'BUNDLE');
       event.dataTransfer.setData('application/label', item.name);
       event.dataTransfer.setData('application/bundledata', JSON.stringify(item.bundleData));
+      event.dataTransfer.setData('application/repo', item.repo || '');
     } else {
       const comp = item as BundleComponent;
       const nodeType = categoryToNodeType[comp.category] || 'AGENT';
       event.dataTransfer.setData('application/reactflow', nodeType);
       event.dataTransfer.setData('application/label', comp.name);
       event.dataTransfer.setData('application/filepath', comp.path);
+      event.dataTransfer.setData('application/repo', parentRepo || '');
     }
     event.dataTransfer.effectAllowed = 'move';
   };
@@ -332,13 +434,12 @@ export const LibraryPanel = () => {
 
     let bundles = filteredInventory.filter((item) => item.type === 'bundle');
 
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      bundles = bundles.filter(
-        (b) =>
-          b.name.toLowerCase().includes(term) ||
-          b.description?.toLowerCase().includes(term)
+    // Use search results if available
+    if (useSearchMode && searchResults) {
+      const bundleIds = new Set(
+        searchResults.items.filter(i => i.isBundle).map(i => i.id)
       );
+      bundles = bundles.filter(b => bundleIds.has(b.id));
     }
 
     if (bundles.length === 0) {
@@ -354,73 +455,107 @@ export const LibraryPanel = () => {
     );
   };
 
+  // Render search results from API
+  const renderSearchResults = () => {
+    const showAddMode = addToAgentMode && selectedNode && configKey;
+
+    if (isSearching) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mb-2" />
+          <p className="text-sm">Searching...</p>
+        </div>
+      );
+    }
+
+    if (!searchResults || searchResults.items.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+          <Search className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-sm">No matching components</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-2 space-y-1">
+        {searchResults.items.map((item) => {
+          const itemIsAdded = isItemAdded(item.name);
+          const inventoryItem: InventoryItem = {
+            id: item.id,
+            name: item.name,
+            path: item.path,
+            type: item.isBundle ? 'bundle' : 'file',
+            category: item.nodeType,
+            description: item.description,
+            repo: item.repo,
+          };
+
+          return (
+            <div
+              key={item.id}
+              className={`group flex items-center gap-2 p-2 rounded-lg transition-all ${
+                showAddMode
+                  ? 'cursor-pointer hover:bg-slate-50'
+                  : 'cursor-grab active:cursor-grabbing hover:bg-slate-50'
+              } ${itemIsAdded ? 'bg-emerald-50 border border-emerald-200' : 'border border-transparent'}`}
+              draggable={!showAddMode}
+              onDragStart={(e) => !showAddMode && onDragStart(e, inventoryItem)}
+              onClick={() => showAddMode && toggleItemOnAgent(inventoryItem)}
+            >
+              {!showAddMode && (
+                <GripVertical
+                  size={12}
+                  className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                />
+              )}
+              {showAddMode && (
+                <div
+                  className={`shrink-0 w-5 h-5 flex items-center justify-center rounded-md transition-all ${
+                    itemIsAdded ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  {itemIsAdded ? <Check size={12} /> : <Plus size={12} />}
+                </div>
+              )}
+              {getIcon(inventoryItem)}
+              <div className="flex flex-col overflow-hidden flex-1">
+                <span
+                  className={`text-sm truncate ${
+                    itemIsAdded ? 'text-emerald-700 font-medium' : 'text-slate-700'
+                  }`}
+                >
+                  {item.name}
+                </span>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                  <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500">
+                    {item.nodeType}
+                  </span>
+                  {item.repo && (
+                    <span className="truncate">{item.repo.replace(/-main$/, '')}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (libraryCategory === 'bundles') {
       return renderBundlesContent();
     }
 
+    // Use search results if filters are active
+    if (useSearchMode) {
+      return renderSearchResults();
+    }
+
     if (!filteredInventory.length) return null;
 
     const showAddMode = addToAgentMode && selectedNode && configKey;
-
-    if (searchTerm) {
-      const results: InventoryItem[] = [];
-      const traverse = (items: InventoryItem[]) => {
-        for (const item of items) {
-          if (item.name.toLowerCase().includes(searchTerm.toLowerCase()) && item.type === 'file') {
-            results.push(item);
-          }
-          if (item.children) traverse(item.children);
-        }
-      };
-      traverse(filteredInventory);
-
-      if (results.length === 0) {
-        return (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-            <Search className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-sm">No matching components</p>
-          </div>
-        );
-      }
-
-      return (
-        <div className="p-2 space-y-1">
-          {results.map(item => {
-            const itemIsAdded = isItemAdded(item.name);
-            return (
-              <div
-                key={item.id}
-                className={`group flex items-center gap-2 p-2 rounded-lg transition-all ${
-                  showAddMode ? 'cursor-pointer hover:bg-slate-50' : 'cursor-grab active:cursor-grabbing hover:bg-slate-50'
-                } ${itemIsAdded ? 'bg-emerald-50 border border-emerald-200' : 'border border-transparent'}`}
-                draggable={!showAddMode}
-                onDragStart={(e) => !showAddMode && onDragStart(e, item)}
-                onClick={() => showAddMode && toggleItemOnAgent(item)}
-              >
-                {!showAddMode && (
-                  <GripVertical size={12} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-                )}
-                {showAddMode && (
-                  <div className={`shrink-0 w-5 h-5 flex items-center justify-center rounded-md transition-all ${
-                    itemIsAdded ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
-                  }`}>
-                    {itemIsAdded ? <Check size={12} /> : <Plus size={12} />}
-                  </div>
-                )}
-                {getIcon(item)}
-                <div className="flex flex-col overflow-hidden flex-1">
-                  <span className={`text-sm truncate ${itemIsAdded ? 'text-emerald-700 font-medium' : 'text-slate-700'}`}>
-                    {item.name}
-                  </span>
-                  <span className="text-[10px] text-slate-400 truncate">{item.path.split('/').slice(-3, -1).join('/')}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
 
     return (
       <div className="p-2 space-y-0.5">
@@ -531,20 +666,49 @@ export const LibraryPanel = () => {
             </div>
           </>
         ) : (
-          <h2 className="font-bold text-slate-800 text-sm mb-3">
-            {libraryCategory.charAt(0).toUpperCase() + libraryCategory.slice(1)}
-          </h2>
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold text-slate-800 text-sm">
+                {libraryCategory.charAt(0).toUpperCase() + libraryCategory.slice(1)}
+              </h2>
+              {/* View Mode Toggle */}
+              <div className="flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-lg">
+                <button
+                  onClick={() => setLibraryViewMode('type')}
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    libraryViewMode === 'type'
+                      ? 'bg-white shadow-sm text-slate-800 font-medium'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  By Type
+                </button>
+                <button
+                  onClick={() => setLibraryViewMode('bucket')}
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    libraryViewMode === 'bucket'
+                      ? 'bg-white shadow-sm text-slate-800 font-medium'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  By Goal
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
-        {/* Search */}
-        <div className="relative mt-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-          <input
-            type="text"
-            placeholder="Search components..."
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-slate-50 transition-all"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+        {/* Search Filters */}
+        <div className="mt-3">
+          <SearchFilters
+            facets={searchResults?.facets || null}
+            filters={libraryFilters}
+            onChange={setLibraryFilters}
+            onReset={resetLibraryFilters}
+            addToAgentMode={!!showAddModeHeader}
+            totalResults={searchResults?.total}
+            isLoading={isSearching}
+            showBucketFilters={libraryViewMode === 'bucket' && !!useSearchMode}
           />
         </div>
       </div>
@@ -552,7 +716,17 @@ export const LibraryPanel = () => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {!showAddModeHeader && renderNodeTemplates()}
-        {renderContent()}
+        {/* Show bucket view when in bucket mode and no active search/filters */}
+        {libraryViewMode === 'bucket' && !useSearchMode && !showAddModeHeader ? (
+          <BucketView
+            onSelectBucket={handleBucketSelect}
+            onSelectSubcategory={handleSubcategorySelect}
+            selectedBuckets={libraryFilters.buckets}
+            selectedSubcategories={libraryFilters.subcategories}
+          />
+        ) : (
+          renderContent()
+        )}
       </div>
     </aside>
   );

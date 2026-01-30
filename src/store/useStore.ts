@@ -13,14 +13,35 @@ import {
   applyEdgeChanges,
 } from 'reactflow';
 import { EdgeType } from '../types/core';
+import { WorkflowConfig, DEFAULT_WORKFLOW_CONFIG } from '../types/config';
 import { needsMigration, migrateWorkflow } from '../utils/workflowMigration';
 
-export interface WorkflowConfig {
-  name: string;
-  description: string;
-  framework: 'claude-code' | 'langchain' | 'autogen' | 'custom';
-  skillFormat: 'markdown' | 'yaml' | 'json';
+// Re-export WorkflowConfig for backwards compatibility
+export type { WorkflowConfig } from '../types/config';
+
+// Library filter state
+export interface LibraryFilters {
+  search: string;
+  globalSearch: boolean; // When true, search across all categories
+  types: string[];
+  repos: string[];
+  categories: string[];
+  buckets: string[]; // Capability bucket filter (OR logic)
+  subcategories: string[]; // Requires bucket filter; AND with bucket, OR within subcategories
 }
+
+export const DEFAULT_LIBRARY_FILTERS: LibraryFilters = {
+  search: '',
+  globalSearch: false,
+  types: [],
+  repos: [],
+  categories: [],
+  buckets: [],
+  subcategories: [],
+};
+
+// View mode for library panel
+export type LibraryViewMode = 'type' | 'bucket';
 
 interface StoreState {
   nodes: Node[];
@@ -30,6 +51,8 @@ interface StoreState {
   addToAgentMode: boolean;
   workflowConfig: WorkflowConfig;
   isConfigModalOpen: boolean;
+  libraryFilters: LibraryFilters;
+  libraryViewMode: LibraryViewMode;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -42,6 +65,11 @@ interface StoreState {
   // Workflow config
   setWorkflowConfig: (config: Partial<WorkflowConfig>) => void;
   setConfigModalOpen: (open: boolean) => void;
+  // Library filters
+  setLibraryFilters: (filters: Partial<LibraryFilters>) => void;
+  resetLibraryFilters: () => void;
+  // View mode
+  setLibraryViewMode: (mode: LibraryViewMode) => void;
   // Hierarchy helpers
   addChildNode: (parentId: string, node: Node) => void;
   moveNodeToParent: (nodeId: string, parentId: string | null) => void;
@@ -56,13 +84,10 @@ const useStore = create<StoreState>((set, get) => ({
   selectedNode: null,
   libraryCategory: 'agents',
   addToAgentMode: false,
-  workflowConfig: {
-    name: 'Untitled Workflow',
-    description: '',
-    framework: 'claude-code',
-    skillFormat: 'markdown',
-  },
+  workflowConfig: DEFAULT_WORKFLOW_CONFIG,
   isConfigModalOpen: false,
+  libraryFilters: DEFAULT_LIBRARY_FILTERS,
+  libraryViewMode: 'type' as LibraryViewMode,
 
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -123,6 +148,29 @@ const useStore = create<StoreState>((set, get) => ({
 
   setConfigModalOpen: (open) => {
     set({ isConfigModalOpen: open });
+  },
+
+  setLibraryFilters: (filters) => {
+    set({ libraryFilters: { ...get().libraryFilters, ...filters } });
+  },
+
+  resetLibraryFilters: () => {
+    set({ libraryFilters: DEFAULT_LIBRARY_FILTERS });
+  },
+
+  setLibraryViewMode: (mode) => {
+    // When switching modes, preserve search text but reset type/bucket/category/subcategory filters
+    set({
+      libraryViewMode: mode,
+      libraryFilters: {
+        ...get().libraryFilters,
+        types: [],
+        buckets: [],
+        subcategories: [],
+        categories: [],
+        // search and globalSearch are preserved
+      },
+    });
   },
 
   // Hierarchy helpers for container nodes (Department, Agent Pool)
