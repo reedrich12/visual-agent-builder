@@ -1,8 +1,33 @@
-import { Settings } from 'lucide-react';
+import { Settings, Package, GitBranch, Users, Bot, Zap, FileText } from 'lucide-react';
 import useStore from '../store/useStore';
+import { ExportFramework, SkillSchema, FRAMEWORK_METADATA, SKILL_SCHEMA_METADATA } from '../types/config';
+
+const frameworkIcons: Record<ExportFramework, React.ElementType> = {
+  'vab-native': Package,
+  langgraph: GitBranch,
+  crewai: Users,
+  autogen: Bot,
+};
+
+const frameworkColors: Record<ExportFramework, string> = {
+  'vab-native': 'bg-indigo-100 text-indigo-700',
+  langgraph: 'bg-purple-100 text-purple-700',
+  crewai: 'bg-teal-100 text-teal-700',
+  autogen: 'bg-amber-100 text-amber-700',
+};
+
+const schemaIcons: Record<SkillSchema, React.ElementType> = {
+  agentskills: Zap,
+  simple: FileText,
+};
 
 export const StatusPanel = () => {
   const { workflowConfig, setConfigModalOpen, nodes, edges } = useStore();
+
+  const FrameworkIcon = frameworkIcons[workflowConfig.framework];
+  const SchemaIcon = schemaIcons[workflowConfig.skillSchema];
+  const frameworkMeta = FRAMEWORK_METADATA[workflowConfig.framework];
+  const schemaMeta = SKILL_SCHEMA_METADATA[workflowConfig.skillSchema];
 
   return (
     <div className="flex items-center gap-4 text-sm">
@@ -16,20 +41,24 @@ export const StatusPanel = () => {
       <div className="w-px h-4 bg-slate-200" />
 
       {/* Framework Badge */}
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500">Framework:</span>
-        <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
-          {workflowConfig.framework}
-        </span>
-      </div>
+      <button
+        onClick={() => setConfigModalOpen(true)}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all hover:ring-2 hover:ring-offset-1 hover:ring-slate-300 ${frameworkColors[workflowConfig.framework]}`}
+        title={`Target: ${frameworkMeta.description}`}
+      >
+        <FrameworkIcon className="w-3.5 h-3.5" />
+        {frameworkMeta.label}
+      </button>
 
-      {/* Skill Format Badge */}
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500">Format:</span>
-        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium uppercase">
-          {workflowConfig.skillFormat}
-        </span>
-      </div>
+      {/* Skill Schema Badge */}
+      <button
+        onClick={() => setConfigModalOpen(true)}
+        className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium transition-all hover:ring-2 hover:ring-offset-1 hover:ring-slate-300"
+        title={`Schema: ${schemaMeta.description}`}
+      >
+        <SchemaIcon className="w-3.5 h-3.5" />
+        {schemaMeta.label}
+      </button>
 
       <div className="w-px h-4 bg-slate-200" />
 

@@ -4,6 +4,7 @@ import { LibraryPanel } from './components/Library/LibraryPanel';
 import { PropertiesPanel } from './components/Properties/PropertiesPanel';
 import { ConfigModal } from './components/ConfigModal';
 import { StatusPanel } from './components/StatusPanel';
+import { ChatPanel } from './components/Chat';
 import { fetchInventory } from './services/api';
 import { Zap, Settings } from 'lucide-react';
 import useStore from './store/useStore';
@@ -93,6 +94,9 @@ function AppContent() {
 
       {/* Config Modal */}
       <ConfigModal />
+
+      {/* AI Chat Panel (floating bottom-right) */}
+      <ChatPanel />
     </div>
   );
 }

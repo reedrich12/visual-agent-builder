@@ -120,6 +120,11 @@ export const PropertiesPanel = () => {
               <h2 className="text-sm font-semibold text-slate-800 truncate">
                 {selectedNode.data.label || 'Untitled'}
               </h2>
+              {selectedNode.data.repo && (
+                <p className="text-[10px] text-slate-400 font-mono truncate">
+                  {selectedNode.data.repo}
+                </p>
+              )}
               <div className="flex items-center gap-2 mt-0.5">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${colors.bg} ${colors.text}`}>
                   {typeInfo?.displayName || nodeType}

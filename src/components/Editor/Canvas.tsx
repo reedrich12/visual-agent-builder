@@ -105,6 +105,7 @@ const CanvasContent = () => {
       const label = event.dataTransfer.getData('application/label');
       const filePath = event.dataTransfer.getData('application/filepath');
       const bundleDataStr = event.dataTransfer.getData('application/bundledata');
+      const repo = event.dataTransfer.getData('application/repo');
 
       if (!type) {
         return;
@@ -162,6 +163,7 @@ const CanvasContent = () => {
               data: {
                 label: comp.name,
                 type: comp.nodeType,
+                repo: repo || undefined,
                 config: {
                   description: contents[index],
                 },
@@ -195,6 +197,7 @@ const CanvasContent = () => {
         data: {
           label: label || `${type} Node`,
           type: nodeType,
+          repo: repo || undefined,
           config: {
             description: componentCode, // Pre-populate with full markdown
           },

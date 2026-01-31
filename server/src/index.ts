@@ -1,7 +1,10 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
 import path from 'path';
+import { createServer } from 'http';
+import { Server as SocketServer } from 'socket.io';
 import {
   scanInventory,
   INVENTORY_ROOT,
@@ -9,9 +12,41 @@ import {
   searchInventory,
   FlattenedItem,
 } from '../services/inventory';
+import { initSocketEmitter, TypedSocketServer } from '../socket/emitter';
+import { setupSocketHandlers } from '../socket/handlers';
+import {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  InterServerEvents,
+  SocketData,
+} from '../../shared/socket-events';
+import { initializeSandbox } from '../mcp/sandbox-mcp';
+import { loadPersistedLayout } from '../mcp/canvas-mcp';
+import { startSkillWatcher, capabilityRegistry } from '../watcher/skill-watcher';
+import { createSupervisorAgent } from '../agents/supervisor';
+import { getSession } from '../socket/handlers';
+import { getPoolStatus } from '../lib/anthropic-client';
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = 3001;
+
+// Initialize Socket.io with CORS
+const io: TypedSocketServer = new SocketServer<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>(httpServer, {
+  cors: {
+    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    methods: ['GET', 'POST'],
+  },
+});
+
+// Initialize socket emitter and handlers
+initSocketEmitter(io);
+setupSocketHandlers(io);
 
 // Cache for search index
 let searchIndex: FlattenedItem[] | null = null;
@@ -128,6 +163,92 @@ app.get('/api/inventory/bucket-counts', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// API endpoint to get registered capabilities
+app.get('/api/capabilities', (req, res) => {
+  const type = req.query.type as string | undefined;
+  const capabilities = type
+    ? capabilityRegistry.getByType(type as 'skill' | 'hook' | 'command')
+    : capabilityRegistry.getAll();
+
+  res.json({
+    count: capabilities.length,
+    capabilities: capabilities.map((cap) => ({
+      name: cap.name,
+      type: cap.type,
+      triggers: cap.triggers,
+      loadedAt: cap.loadedAt,
+    })),
+  });
 });
+
+// Chat endpoint - Alternative to Socket.io for sending messages
+// Note: Socket.io (session:message event) is preferred for real-time updates
+app.post('/api/chat', async (req, res) => {
+  const { message, sessionId } = req.body;
+
+  if (!message || !sessionId) {
+    return res.status(400).json({
+      error: 'Missing required fields: message and sessionId',
+    });
+  }
+
+  try {
+    const session = getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({
+        error: `Session ${sessionId} not found. Start a session via Socket.io first.`,
+      });
+    }
+
+    // Create supervisor and process message
+    const supervisor = createSupervisorAgent(sessionId);
+    await supervisor.processMessage(message, session);
+
+    res.json({
+      success: true,
+      sessionId,
+      message: 'Message processed. Check Socket.io for real-time updates.',
+    });
+  } catch (error) {
+    console.error('[Chat API] Error:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Health check endpoint with pool status
+app.get('/api/health', (req, res) => {
+  const poolStatus = getPoolStatus();
+  res.json({
+    status: 'ok',
+    timestamp: Date.now(),
+    pools: poolStatus,
+  });
+});
+
+// Initialize sandbox and start server
+async function startServer() {
+  try {
+    // Initialize sandbox directory structure
+    await initializeSandbox();
+
+    // Load persisted canvas layout (if any)
+    await loadPersistedLayout();
+
+    // Start skill hot-reload watcher
+    await startSkillWatcher();
+
+    // Start HTTP server
+    httpServer.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Socket.io enabled for real-time canvas updates`);
+      console.log(`Skill hot-reload watcher active`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

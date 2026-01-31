@@ -390,6 +390,13 @@ export interface SkillTrigger {
   filePatterns?: string[];   // Trigger when accessing matching files
   commands?: string[];       // Trigger on these slash commands
   events?: string[];         // Trigger on these hook events
+  contextPatterns?: string[]; // Context patterns for activation
+}
+
+export interface SkillExample {
+  input: string;
+  output?: string;
+  description?: string;
 }
 
 export interface SkillConfig {
@@ -400,6 +407,16 @@ export interface SkillConfig {
   maxTokens?: number;        // Token budget for this skill
   autoActivate?: boolean;    // Load automatically on match
   content?: string;          // Skill markdown content
+
+  // Extended properties for AgentSkills.io schema
+  whenToUse?: string;        // Guidance for when to apply this skill
+  whenNotToUse?: string;     // Guidance for when NOT to apply
+  requiresConfirmation?: boolean; // Requires user confirmation
+  tools?: string[];          // Tools this skill uses
+  mcpServers?: string[];     // MCP servers this skill requires
+  skills?: string[];         // Sub-skills this skill depends on
+  examples?: SkillExample[]; // Usage examples
+  tags?: string[];           // Categorization tags
 }
 
 // ============================================================================
@@ -450,6 +467,7 @@ export interface CommandConfig {
 export interface NodeData {
   label: string;
   type: NodeType;
+  repo?: string;             // Source repository name (e.g., 'claude-code-main')
   config: NodeConfig | DepartmentConfig | AgentPoolConfig | AgentConfig |
           MCPServerConfig | SkillConfig | HookConfig | CommandConfig;
   componentId?: string;      // Reference to Master-Agent component
