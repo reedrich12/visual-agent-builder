@@ -40,8 +40,8 @@ function createPools(): Record<AgentRole, PoolConfig> {
         ? new Anthropic({ apiKey: process.env.BUILDER_KEY_BACKUP })
         : null,
       models: {
-        preferred: 'claude-sonnet-4-5-20250514',    // Sonnet 4.5 - high intelligence
-        emergency: 'claude-3-7-sonnet-latest',      // Sonnet 3.7 - speed optimized
+        preferred: 'claude-sonnet-4-5-20250929',    // Sonnet 4.5 - high intelligence
+        emergency: 'claude-3-7-sonnet-20250219',    // Sonnet 3.7 - speed optimized
       },
     },
     ARCHITECT: {
@@ -52,8 +52,8 @@ function createPools(): Record<AgentRole, PoolConfig> {
         ? new Anthropic({ apiKey: process.env.ARCHITECT_KEY_BACKUP })
         : null,
       models: {
-        preferred: 'claude-opus-4-5-20250514',     // Opus 4.5 - deep reasoning
-        emergency: 'claude-sonnet-4-5-20250514',   // Sonnet 4.5 - fallback intelligence
+        preferred: 'claude-opus-4-5-20251101',     // Opus 4.5 - deep reasoning
+        emergency: 'claude-sonnet-4-5-20250929',   // Sonnet 4.5 - fallback intelligence
       },
     },
   };

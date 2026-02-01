@@ -7,7 +7,6 @@ import { useCallback, useEffect } from 'react';
 import { Node, Edge } from 'reactflow';
 import { useSocket, UseSocketReturn } from './useSocket';
 import useStore from '../store/useStore';
-import { NodeType } from '../types/core';
 import {
   CanvasNodePayload,
   CanvasNodeUpdatePayload,
@@ -16,20 +15,23 @@ import {
   SessionState,
 } from '../../shared/socket-events';
 
-// Map from socket node types to internal NodeType
-const NODE_TYPE_MAP: Record<string, NodeType> = {
-  agent: 'AGENT',
-  skill: 'SKILL',
-  plugin: 'PLUGIN',
-  tool: 'TOOL',
-  provider: 'PROVIDER',
-  hook: 'HOOK',
-  command: 'COMMAND',
-  reasoning: 'REASONING',
-  department: 'DEPARTMENT',
-  'agent-pool': 'AGENT_POOL',
-  'mcp-server': 'MCP_SERVER',
+// Map NodeType to React Flow component type
+const nodeTypeToComponent: Record<string, string> = {
+  AGENT: 'customNode',
+  SKILL: 'customNode',
+  PLUGIN: 'customNode',
+  TOOL: 'customNode',
+  PROVIDER: 'customNode',
+  HOOK: 'customNode',
+  COMMAND: 'customNode',
+  REASONING: 'customNode',
+  DEPARTMENT: 'departmentNode',
+  AGENT_POOL: 'agentPoolNode',
+  MCP_SERVER: 'mcpServerNode',
 };
+
+// Container types that need special sizing
+const CONTAINER_TYPES = ['DEPARTMENT', 'AGENT_POOL'];
 
 export interface UseHeadlessSessionReturn extends UseSocketReturn {
   // Additional session-specific methods can be added here
@@ -47,23 +49,39 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
 
   // Handle node created from server
   const handleNodeCreated = useCallback((payload: CanvasNodePayload) => {
-    const nodeType = NODE_TYPE_MAP[payload.type.toLowerCase()] || 'AGENT';
+    // 1. Normalize type to UPPERCASE_UNDERSCORE format
+    const normalizedType = payload.type.toUpperCase().replace(/-/g, '_');
+
+    // 2. Resolve React Flow component type (fallback to 'customNode' prevents crash)
+    const componentType = nodeTypeToComponent[normalizedType] || 'customNode';
+    const isContainer = CONTAINER_TYPES.includes(normalizedType);
 
     const newNode: Node = {
       id: payload.nodeId,
-      type: 'custom',
+      type: componentType,  // FIX: Use proper component type, not hardcoded 'custom'
       position: payload.position,
       parentId: payload.parentId,
       extent: payload.parentId ? 'parent' : undefined,
+      expandParent: payload.parentId ? true : undefined,
+
       data: {
-        label: payload.label,
-        nodeType,
+        // ✅ CRITICAL: Spread payload.data FIRST so our fixes override it
         ...payload.data,
+
+        label: payload.label,
+        // ✅ FIX: Explicitly set 'type' key expected by PropertiesPanel
+        type: normalizedType,
+        config: payload.data || {},
       },
+
+      // ✅ FIX: Container styling (merge with payload style if exists)
+      style: isContainer
+        ? { width: 400, height: 300, ...(payload as any).style }
+        : (payload as any).style,
     };
 
     addNode(newNode);
-    console.log(`[Headless] Node created: ${payload.nodeId}`);
+    console.log(`[Headless] Node created: ${payload.nodeId} (type: ${normalizedType}, component: ${componentType})`);
   }, [addNode]);
 
   // Handle node updated from server

@@ -19,6 +19,62 @@ import { SANDBOX_ROOT } from './sandbox-mcp';
 // Layout file path
 const LAYOUT_FILE = path.join(SANDBOX_ROOT, 'layout.json');
 
+// =============================================================================
+// Node Type Normalization
+// =============================================================================
+// Maps lowercase-hyphenated types from Architect/Builder to UPPERCASE_UNDERSCORE
+// types expected by the frontend schema system.
+
+const NODE_TYPE_MAP: Record<string, string> = {
+  // Standard types (lowercase → UPPERCASE)
+  'agent': 'AGENT',
+  'skill': 'SKILL',
+  'plugin': 'PLUGIN',
+  'tool': 'TOOL',
+  'provider': 'PROVIDER',
+  'hook': 'HOOK',
+  'command': 'COMMAND',
+  'reasoning': 'REASONING',
+  'department': 'DEPARTMENT',
+  'agent-pool': 'AGENT_POOL',
+  'mcp-server': 'MCP_SERVER',
+
+  // Already uppercase (passthrough)
+  'AGENT': 'AGENT',
+  'SKILL': 'SKILL',
+  'PLUGIN': 'PLUGIN',
+  'TOOL': 'TOOL',
+  'PROVIDER': 'PROVIDER',
+  'HOOK': 'HOOK',
+  'COMMAND': 'COMMAND',
+  'REASONING': 'REASONING',
+  'DEPARTMENT': 'DEPARTMENT',
+  'AGENT_POOL': 'AGENT_POOL',
+  'MCP_SERVER': 'MCP_SERVER',
+};
+
+/**
+ * Normalize a node type string to the UPPERCASE_UNDERSCORE format
+ * expected by the frontend schema system.
+ *
+ * @param type - Input type (e.g., 'agent', 'agent-pool', 'mcp-server')
+ * @returns Normalized type (e.g., 'AGENT', 'AGENT_POOL', 'MCP_SERVER')
+ */
+function normalizeNodeType(type: string): string {
+  // First check direct mapping
+  if (NODE_TYPE_MAP[type]) {
+    return NODE_TYPE_MAP[type];
+  }
+
+  // Fallback: convert to uppercase and replace hyphens with underscores
+  const normalized = type.toUpperCase().replace(/-/g, '_');
+
+  // Warn if this is an unknown type
+  console.warn(`[Canvas] Unknown node type "${type}" normalized to "${normalized}"`);
+
+  return normalized;
+}
+
 // -----------------------------------------------------------------------------
 // Tool Result Types
 // -----------------------------------------------------------------------------
@@ -91,10 +147,13 @@ export function canvas_create_node(params: CreateNodeParams): ToolResult<CreateN
       };
     }
 
+    // Normalize the node type to UPPERCASE_UNDERSCORE format
+    const normalizedType = normalizeNodeType(params.type);
+
     // Create node in state
     const node: CanvasNode = {
       id: nodeId,
-      type: params.type,
+      type: normalizedType,
       label: params.label,
       position,
       parentId: params.parentId,
@@ -106,7 +165,7 @@ export function canvas_create_node(params: CreateNodeParams): ToolResult<CreateN
     // Emit socket event to update UI
     const payload: CanvasNodePayload = {
       nodeId,
-      type: params.type,
+      type: normalizedType,
       label: params.label,
       position,
       parentId: params.parentId,
