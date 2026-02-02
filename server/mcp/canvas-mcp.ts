@@ -497,29 +497,40 @@ export function canvas_sync_from_client(
 // -----------------------------------------------------------------------------
 
 function calculateNextPosition(parentId?: string): { x: number; y: number } {
-  // Simple auto-layout: place new nodes in a grid pattern
+  // Phase 5.1 Fix: Grid layout for containers to avoid "Sardine Can" effect
   const existingNodes = [...canvasState.nodes.values()];
 
   if (parentId) {
-    // Position relative to parent
     const parent = canvasState.nodes.get(parentId);
-    const childrenOfParent = existingNodes.filter((n) => n.parentId === parentId);
-    const offsetX = 50;
-    const offsetY = 80 + childrenOfParent.length * 120;
+    const siblings = existingNodes.filter((n) => n.parentId === parentId);
+    const count = siblings.length;
+
+    // Check parent type for layout strategy
+    if (parent?.type === 'AGENT_POOL') {
+      // GRID LAYOUT: 3 columns for agents inside pools
+      const col = count % 3;
+      const row = Math.floor(count / 3);
+      return { x: 40 + col * 250, y: 80 + row * 150 };
+    } else if (parent?.type === 'DEPARTMENT') {
+      // HORIZONTAL LAYOUT: Pools side by side inside departments
+      return { x: 50 + count * 550, y: 100 };
+    }
+
+    // Fallback: vertical stack for other container types
     return {
-      x: parent ? parent.position.x + offsetX : 200,
-      y: parent ? parent.position.y + offsetY : 200,
+      x: 50,
+      y: 80 + count * 120,
     };
   }
 
-  // Position for root nodes
+  // Root nodes: grid pattern (4 columns)
   const rootNodes = existingNodes.filter((n) => !n.parentId);
   const col = rootNodes.length % 4;
   const row = Math.floor(rootNodes.length / 4);
 
   return {
-    x: 100 + col * 300,
-    y: 100 + row * 200,
+    x: 100 + col * 400,
+    y: 100 + row * 300,
   };
 }
 

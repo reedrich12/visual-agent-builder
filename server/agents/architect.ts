@@ -136,6 +136,18 @@ Use \${variable_name} syntax to reference outputs from previous steps:
    - Use edgeType: 'data' for skills/tools, 'event' for hooks
    - Example: After creating "Terraform Skill", add: { type: 'CONNECT_NODES', sourceId: '\${infra_agent_id}', targetId: '\${terraform_skill_id}', edgeType: 'data' }
    - NEVER leave Skills, Hooks, or MCP Servers floating without connections
+8. **CONNECT TO PEOPLE, NOT PLACES**:
+   - NEVER connect edges directly to a DEPARTMENT or AGENT_POOL container node
+   - ALWAYS connect to the Lead Agent or specific Agent INSIDE that container
+   - Example: Director → DevOps Lead Agent (CORRECT), NOT Director → DevOps Department (WRONG)
+   - When creating hierarchies, first create the container, then the Lead Agent inside it, then connect to the Lead Agent
+9. **USE SEMANTIC EDGE TYPES**:
+   - 'delegation': Manager/Director → Subordinate/Lead (renders as Orange solid line)
+   - 'data': Data pipeline / information exchange between agents (renders as Blue solid line)
+   - 'control': Sequential workflow steps (renders as Green solid line)
+   - 'event': Hook/Alert → Agent notifications (renders as Purple solid line)
+   - 'failover': Backup/fallback connections (renders as Red dashed line)
+   - ALWAYS specify edgeType in CONNECT_NODES actions for proper visualization
 
 ## Example Output
 

@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useCallback, useEffect } from 'react';
-import { Node, Edge } from 'reactflow';
+import { Node, Edge, MarkerType } from 'reactflow';
 import { useSocket, UseSocketReturn } from './useSocket';
 import useStore from '../store/useStore';
 import {
@@ -16,13 +16,13 @@ import {
 } from '../../shared/socket-events';
 
 // =============================================================================
-// Phase 5: Smart Sizing & Agent Defaults
+// Phase 5.1: Visual Tuning & Bug Fixes
 // =============================================================================
 
-// Smart sizing based on container type - prevents "sardine can" effect
+// Smart sizing based on container type - increased for grid layout
 const DEFAULT_SIZES: Record<string, { width: number; height: number }> = {
-  DEPARTMENT: { width: 1800, height: 1000 }, // Large canvas for whole team
-  AGENT_POOL: { width: 500, height: 800 },   // Tall column for vertical stacking
+  DEPARTMENT: { width: 2200, height: 1200 }, // Fit 3-4 pools side by side
+  AGENT_POOL: { width: 850, height: 700 },   // Fit 3x2 grid of agents
   DEFAULT: { width: 400, height: 300 },      // Fallback for other containers
 };
 
@@ -32,6 +32,16 @@ const AGENT_DEFAULTS = {
   model: 'claude-3-5-sonnet-latest',
   temperature: 0.7,
   role: 'executor',
+};
+
+// Semantic edge colors matching UI design
+const EDGE_STYLES: Record<string, { stroke: string; strokeDasharray?: string }> = {
+  delegation: { stroke: '#f97316' },                      // Orange - Director → Lead
+  data:       { stroke: '#3b82f6' },                      // Blue - Data flow
+  control:    { stroke: '#10b981' },                      // Green - Sequential control
+  event:      { stroke: '#a855f7' },                      // Purple - Event/Hook triggers
+  failover:   { stroke: '#ef4444', strokeDasharray: '5,5' }, // Red dashed
+  default:    { stroke: '#b1b1b7', strokeDasharray: '5,5' }, // Grey dashed
 };
 
 // Map NodeType to React Flow component type
@@ -79,8 +89,24 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
     const isContainer = CONTAINER_TYPES.includes(normalizedType);
     const isAgent = normalizedType === 'AGENT';
 
-    // ✅ Phase 5 Fix: Robust config extraction - handle nested or flat data
+    // ✅ Phase 5.1 Fix: Robust config extraction - handle nested or flat data
     const incomingConfig = payload.data?.config || payload.data || {};
+
+    // ✅ Phase 5.1 Fix: Ghost Config Bug - only use incoming values if truthy (not empty string)
+    const mergedConfig = isAgent ? {
+      ...AGENT_DEFAULTS,
+      // Only override if incoming value is NOT empty string
+      provider: incomingConfig.provider || AGENT_DEFAULTS.provider,
+      model: incomingConfig.model || AGENT_DEFAULTS.model,
+      role: incomingConfig.role || AGENT_DEFAULTS.role,
+      temperature: incomingConfig.temperature ?? AGENT_DEFAULTS.temperature,
+      // Include any other fields from incoming config
+      ...Object.fromEntries(
+        Object.entries(incomingConfig).filter(([k]) =>
+          !['provider', 'model', 'role', 'temperature'].includes(k)
+        )
+      ),
+    } : incomingConfig;
 
     const newNode: Node = {
       id: payload.nodeId,
@@ -97,10 +123,8 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
         label: payload.label,
         // ✅ FIX: Explicitly set 'type' key expected by PropertiesPanel
         type: normalizedType,
-        // ✅ Phase 5 Fix: Inject agent defaults so they're immediately runnable
-        config: isAgent
-          ? { ...AGENT_DEFAULTS, ...incomingConfig }
-          : incomingConfig,
+        // ✅ Phase 5.1 Fix: Use hardened merge that ignores empty strings
+        config: mergedConfig,
       },
 
       // ✅ Phase 5 Fix: Smart container sizing (1800px for Departments, 500x800 for Pools)
@@ -152,20 +176,30 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
 
   // Handle edge created from server
   const handleEdgeCreated = useCallback((payload: CanvasEdgePayload) => {
+    // ✅ Phase 5.1 Fix: Apply semantic edge colors based on type
+    const edgeType = (payload.edgeType || (payload.data as any)?.type || 'default').toLowerCase();
+    const style = EDGE_STYLES[edgeType] || EDGE_STYLES.default;
+
     const newEdge: Edge = {
       id: payload.edgeId,
       source: payload.sourceId,
       target: payload.targetId,
-      // ✅ Phase 5 Fix: Use smoothstep for clean 90-degree routing (no spaghetti lines)
+      // ✅ Phase 5 Fix: Use smoothstep for clean 90-degree routing
       type: 'smoothstep',
       animated: true,
-      style: { stroke: '#b1b1b7', strokeWidth: 2 },
-      data: payload.data,
+      // ✅ Phase 5.1 Fix: Semantic colors (orange=delegation, blue=data, etc.)
+      style: {
+        stroke: style.stroke,
+        strokeWidth: 2,
+        strokeDasharray: style.strokeDasharray,
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke },
+      data: { ...payload.data, edgeType },
     };
 
     // ✅ Phase 5 Fix: Use Zustand store's setEdges for state management
     setEdges([...edges, newEdge]);
-    console.log(`[Headless] Edge created: ${payload.edgeId}`);
+    console.log(`[Headless] Edge created: ${payload.edgeId} (type: ${edgeType}, color: ${style.stroke})`);
   }, [edges, setEdges]);
 
   // Handle edge deleted from server
