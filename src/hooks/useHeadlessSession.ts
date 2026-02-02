@@ -15,6 +15,25 @@ import {
   SessionState,
 } from '../../shared/socket-events';
 
+// =============================================================================
+// Phase 5: Smart Sizing & Agent Defaults
+// =============================================================================
+
+// Smart sizing based on container type - prevents "sardine can" effect
+const DEFAULT_SIZES: Record<string, { width: number; height: number }> = {
+  DEPARTMENT: { width: 1800, height: 1000 }, // Large canvas for whole team
+  AGENT_POOL: { width: 500, height: 800 },   // Tall column for vertical stacking
+  DEFAULT: { width: 400, height: 300 },      // Fallback for other containers
+};
+
+// Default config so agents are immediately runnable
+const AGENT_DEFAULTS = {
+  provider: 'anthropic',
+  model: 'claude-3-5-sonnet-latest',
+  temperature: 0.7,
+  role: 'executor',
+};
+
 // Map NodeType to React Flow component type
 const nodeTypeToComponent: Record<string, string> = {
   AGENT: 'customNode',
@@ -54,11 +73,18 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
 
     // 2. Resolve React Flow component type (fallback to 'customNode' prevents crash)
     const componentType = nodeTypeToComponent[normalizedType] || 'customNode';
+
+    // 3. Smart sizing based on type
+    const size = DEFAULT_SIZES[normalizedType] || DEFAULT_SIZES.DEFAULT;
     const isContainer = CONTAINER_TYPES.includes(normalizedType);
+    const isAgent = normalizedType === 'AGENT';
+
+    // ✅ Phase 5 Fix: Robust config extraction - handle nested or flat data
+    const incomingConfig = payload.data?.config || payload.data || {};
 
     const newNode: Node = {
       id: payload.nodeId,
-      type: componentType,  // FIX: Use proper component type, not hardcoded 'custom'
+      type: componentType,
       position: payload.position,
       parentId: payload.parentId,
       extent: payload.parentId ? 'parent' : undefined,
@@ -71,15 +97,19 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
         label: payload.label,
         // ✅ FIX: Explicitly set 'type' key expected by PropertiesPanel
         type: normalizedType,
-        config: payload.data || {},
+        // ✅ Phase 5 Fix: Inject agent defaults so they're immediately runnable
+        config: isAgent
+          ? { ...AGENT_DEFAULTS, ...incomingConfig }
+          : incomingConfig,
       },
 
-      // ✅ FIX: Container styling (merge with payload style if exists)
+      // ✅ Phase 5 Fix: Smart container sizing (1800px for Departments, 500x800 for Pools)
       style: isContainer
-        ? { width: 400, height: 300, ...(payload as any).style }
+        ? { width: size.width, height: size.height, ...(payload as any).style }
         : (payload as any).style,
     };
 
+    // ✅ Phase 5 Fix: Use Zustand store's addNode for state management
     addNode(newNode);
     console.log(`[Headless] Node created: ${payload.nodeId} (type: ${normalizedType}, component: ${componentType})`);
   }, [addNode]);
@@ -126,10 +156,14 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
       id: payload.edgeId,
       source: payload.sourceId,
       target: payload.targetId,
-      type: payload.edgeType || 'default',
+      // ✅ Phase 5 Fix: Use smoothstep for clean 90-degree routing (no spaghetti lines)
+      type: 'smoothstep',
+      animated: true,
+      style: { stroke: '#b1b1b7', strokeWidth: 2 },
       data: payload.data,
     };
 
+    // ✅ Phase 5 Fix: Use Zustand store's setEdges for state management
     setEdges([...edges, newEdge]);
     console.log(`[Headless] Edge created: ${payload.edgeId}`);
   }, [edges, setEdges]);

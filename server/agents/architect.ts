@@ -130,6 +130,12 @@ Use \${variable_name} syntax to reference outputs from previous steps:
 4. **Use Variables**: Store created IDs in variables for later reference
 5. **Be Specific**: Include all necessary configuration in node configs
 6. **Create Files**: Generate corresponding configuration files in sandbox
+7. **CRITICAL - Connect Capabilities**: When creating capability nodes (SKILL, HOOK, COMMAND, MCP_SERVER):
+   - ALWAYS generate a CONNECT_NODES step immediately after creation
+   - Link the capability to the Agent or Pool that uses it
+   - Use edgeType: 'data' for skills/tools, 'event' for hooks
+   - Example: After creating "Terraform Skill", add: { type: 'CONNECT_NODES', sourceId: '\${infra_agent_id}', targetId: '\${terraform_skill_id}', edgeType: 'data' }
+   - NEVER leave Skills, Hooks, or MCP Servers floating without connections
 
 ## Example Output
 
