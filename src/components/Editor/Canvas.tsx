@@ -5,6 +5,7 @@ import ReactFlow, {
   MiniMap,
   ReactFlowProvider,
   Node,
+  Edge,
   ConnectionMode,
   Connection,
   addEdge,
@@ -77,6 +78,9 @@ const CanvasContent = () => {
   // State for edge type selector popup
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [selectorPosition, setSelectorPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Phase 6: State for selected edge
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
 
   const {
     nodes,
@@ -215,7 +219,23 @@ const CanvasContent = () => {
 
   const onSelectionChange = useCallback(({ nodes }: { nodes: Node[] }) => {
     setSelectedNode(nodes[0] || null);
+    // Deselect edge when a node is selected
+    if (nodes.length > 0) {
+      setSelectedEdge(null);
+    }
   }, [setSelectedNode]);
+
+  // Phase 6: Handle edge click for selection
+  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    setSelectedEdge(edge.id);
+    setSelectedNode(null); // Deselect nodes when selecting an edge
+    console.log('[Canvas] Edge selected:', edge.id, 'type:', edge.type);
+  }, [setSelectedNode]);
+
+  // Phase 6: Handle canvas click to deselect edge
+  const onPaneClick = useCallback(() => {
+    setSelectedEdge(null);
+  }, []);
 
   // Handle new connections - show edge type selector
   const handleConnect = useCallback((connection: Connection) => {
@@ -275,7 +295,7 @@ const CanvasContent = () => {
       <Toolbar />
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={edges.map(e => ({ ...e, selected: e.id === selectedEdge }))}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
@@ -283,9 +303,13 @@ const CanvasContent = () => {
         onDrop={onDrop}
         onDragOver={onDragOver}
         onSelectionChange={onSelectionChange}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        edgesSelectable={true}
         connectionMode={ConnectionMode.Loose}
+        defaultEdgeOptions={{ interactionWidth: 20 }}
         fitView
         className="bg-transparent"
       >

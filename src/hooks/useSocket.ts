@@ -37,6 +37,7 @@ export interface UseSocketReturn {
   sessionId: string | null;
   sessionState: SessionState;
   messages: SessionMessage[];
+  socket: TypedSocket | null;
   startSession: () => Promise<string>;
   sendMessage: (content: string) => void;
   cancelSession: () => void;
@@ -194,6 +195,7 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     sessionId,
     sessionState,
     messages,
+    socket: socketRef.current,
     startSession,
     sendMessage,
     cancelSession,

@@ -5,6 +5,7 @@ import { PropertiesPanel } from './components/Properties/PropertiesPanel';
 import { ConfigModal } from './components/ConfigModal';
 import { StatusPanel } from './components/StatusPanel';
 import { ChatPanel } from './components/Chat';
+import { TerminalPanel } from './components/Terminal';
 import { fetchInventory } from './services/api';
 import { Zap, Settings } from 'lucide-react';
 import useStore from './store/useStore';
@@ -97,6 +98,9 @@ function AppContent() {
 
       {/* AI Chat Panel (floating bottom-right) */}
       <ChatPanel />
+
+      {/* Phase 6: Runtime Terminal Panel (floating bottom center) */}
+      <TerminalPanel />
     </div>
   );
 }

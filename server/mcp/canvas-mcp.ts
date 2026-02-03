@@ -195,7 +195,7 @@ export function canvas_create_node(params: CreateNodeParams): ToolResult<CreateN
 export interface ConnectNodesParams {
   sourceId: string;
   targetId: string;
-  edgeType?: string;      // 'data', 'control', 'event', 'delegation', 'failover'
+  edgeType: string;       // REQUIRED: 'data', 'control', 'event', 'delegation', 'failover'
   data?: Record<string, unknown>;
 }
 
@@ -800,7 +800,7 @@ export const CANVAS_TOOLS = {
 
   canvas_connect_nodes: {
     name: 'canvas_connect_nodes',
-    description: 'Connect two nodes with an edge',
+    description: 'Connect two nodes with a semantic edge. You MUST specify edgeType to define the relationship.',
     parameters: {
       type: 'object',
       properties: {
@@ -815,10 +815,10 @@ export const CANVAS_TOOLS = {
         edgeType: {
           type: 'string',
           enum: ['data', 'control', 'event', 'delegation', 'failover'],
-          description: 'Type of connection',
+          description: 'REQUIRED - Type: delegation (Manager→Worker, orange), data (info flow, blue), control (sequence, green), event (triggers, purple), failover (backup, red dashed)',
         },
       },
-      required: ['sourceId', 'targetId'],
+      required: ['sourceId', 'targetId', 'edgeType'],
     },
     handler: canvas_connect_nodes,
   },

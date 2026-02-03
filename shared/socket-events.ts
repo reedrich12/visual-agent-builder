@@ -138,6 +138,10 @@ export interface ClientToServerEvents {
 
   // Canvas sync (client informing server of manual changes)
   'canvas:sync': (payload: { nodes: unknown[]; edges: unknown[] }) => void;
+
+  // Phase 6: Runtime control
+  'system:start': (payload: { sessionId: string; nodes: unknown[]; edges: unknown[] }) => void;
+  'system:stop': (payload: { sessionId: string }) => void;
 }
 
 // -----------------------------------------------------------------------------

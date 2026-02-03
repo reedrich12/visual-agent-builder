@@ -274,7 +274,8 @@ export class BuilderAgent {
         const result = canvas_connect_nodes({
           sourceId: connectAction.sourceId,
           targetId: connectAction.targetId,
-          edgeType: connectAction.edgeType,
+          // Phase 6: edgeType now required, default to 'data' if not specified
+          edgeType: connectAction.edgeType || 'data',
         });
         return {
           success: result.success,

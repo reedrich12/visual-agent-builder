@@ -9,6 +9,7 @@ import { SessionMessage } from '../../shared/socket-events';
 import { Session } from '../types/session';
 import { createSupervisorAgent, SupervisorAgent } from '../agents/supervisor';
 import { canvas_sync_from_client } from '../mcp/canvas-mcp';
+import { simulateSystemStart } from '../services/runtime';
 
 // In-memory session store (will be replaced with proper store later)
 const sessions = new Map<string, Session>();
@@ -222,6 +223,53 @@ export function setupSocketHandlers(io: TypedSocketServer): void {
           console.log(`[Socket] Canvas synced for session: ${sessionId}`);
         }
       }
+    });
+
+    // Phase 6: Handle system start (runtime simulation)
+    socket.on('system:start' as any, async (payload: any) => {
+      const { sessionId, nodes, edges } = payload;
+
+      if (!sessionId) {
+        socket.emit('error', {
+          code: 'INVALID_SESSION',
+          message: 'Session ID required to start system',
+        });
+        return;
+      }
+
+      console.log(`[Socket] System start requested for session: ${sessionId}`);
+
+      // Map node data for runtime
+      const nodeInfos = (nodes as any[]).map((n) => ({
+        id: n.id,
+        type: n.data?.type || n.type || 'UNKNOWN',
+        label: n.data?.label || n.id,
+      }));
+
+      // Map edge data for runtime
+      const edgeInfos = (edges as any[]).map((e) => ({
+        id: e.id,
+        sourceId: e.source,
+        targetId: e.target,
+        edgeType: e.type || e.data?.edgeType || e.data?.type,
+      }));
+
+      try {
+        await simulateSystemStart(sessionId, nodeInfos, edgeInfos);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        socket.emit('error', {
+          code: 'RUNTIME_ERROR',
+          message: `Runtime error: ${errorMessage}`,
+        });
+      }
+    });
+
+    // Phase 6: Handle system stop
+    socket.on('system:stop' as any, (payload: any) => {
+      const { sessionId } = payload;
+      console.log(`[Socket] System stopped for session: ${sessionId}`);
+      // Future: implement actual process termination
     });
 
     // Handle disconnect
