@@ -10,7 +10,6 @@ import {
   Compass,
   Hammer,
   Info,
-  Bot,
 } from 'lucide-react';
 import { SessionMessage } from '../../../shared/socket-events';
 

@@ -54,6 +54,26 @@ const NODE_TYPE_MAP: Record<string, string> = {
 };
 
 /**
+ * Phase 6.2: Generate a default system prompt for agents that don't have one.
+ * This ensures agents are not "empty shells" when created.
+ *
+ * @param label - The display name of the agent
+ * @param role - Optional role description
+ * @returns A descriptive system prompt
+ */
+function generateDefaultSystemPrompt(label: string, role?: string): string {
+  const agentRole = role || 'executor';
+  return `You are ${label}, an AI agent specialized in ${agentRole} tasks.
+
+Your responsibilities:
+- Execute tasks efficiently and report status clearly
+- Collaborate with other agents when needed
+- Follow the established workflow patterns
+
+Always be helpful, accurate, and concise in your responses.`;
+}
+
+/**
  * Normalize a node type string to the UPPERCASE_UNDERSCORE format
  * expected by the frontend schema system.
  *
@@ -150,6 +170,22 @@ export function canvas_create_node(params: CreateNodeParams): ToolResult<CreateN
     // Normalize the node type to UPPERCASE_UNDERSCORE format
     const normalizedType = normalizeNodeType(params.type);
 
+    // ✅ Phase 6.2 Fix: Inject system prompt for agents if not provided
+    let enrichedConfig = params.config || {};
+    if (normalizedType === 'AGENT') {
+      const configWithPrompt = enrichedConfig as Record<string, unknown>;
+      if (!configWithPrompt.systemPrompt) {
+        enrichedConfig = {
+          ...configWithPrompt,
+          systemPrompt: generateDefaultSystemPrompt(
+            params.label,
+            configWithPrompt.role as string | undefined
+          ),
+        };
+        console.log(`[Canvas] Auto-generated system prompt for agent: ${params.label}`);
+      }
+    }
+
     // Create node in state
     const node: CanvasNode = {
       id: nodeId,
@@ -157,7 +193,7 @@ export function canvas_create_node(params: CreateNodeParams): ToolResult<CreateN
       label: params.label,
       position,
       parentId: params.parentId,
-      data: params.config || {},
+      data: enrichedConfig,  // Use enriched config with system prompt
     };
 
     canvasState.nodes.set(nodeId, node);
@@ -169,7 +205,7 @@ export function canvas_create_node(params: CreateNodeParams): ToolResult<CreateN
       label: params.label,
       position,
       parentId: params.parentId,
-      data: params.config,
+      data: enrichedConfig,  // Use enriched config with system prompt
     };
     emitNodeCreated(payload);
 

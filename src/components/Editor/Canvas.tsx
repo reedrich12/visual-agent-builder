@@ -307,7 +307,7 @@ const CanvasContent = () => {
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        edgesSelectable={true}
+        elementsSelectable={true}
         connectionMode={ConnectionMode.Loose}
         defaultEdgeOptions={{ interactionWidth: 20 }}
         fitView

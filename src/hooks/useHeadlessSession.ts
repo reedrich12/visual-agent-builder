@@ -20,8 +20,9 @@ import {
 // =============================================================================
 
 // Smart sizing based on container type - increased for grid layout
+// Phase 6.2: Reduced DEPARTMENT height from 1200 to 900 to prevent overlap
 const DEFAULT_SIZES: Record<string, { width: number; height: number }> = {
-  DEPARTMENT: { width: 2200, height: 1200 }, // Fit 3-4 pools side by side
+  DEPARTMENT: { width: 2200, height: 900 },  // Fit 3-4 pools side by side (reduced from 1200)
   AGENT_POOL: { width: 850, height: 700 },   // Fit 3x2 grid of agents
   DEFAULT: { width: 400, height: 300 },      // Fallback for other containers
 };
@@ -35,13 +36,14 @@ const AGENT_DEFAULTS = {
 };
 
 // Semantic edge colors matching UI design
-const EDGE_STYLES: Record<string, { stroke: string; strokeDasharray?: string }> = {
-  delegation: { stroke: '#f97316' },                      // Orange - Director → Lead
-  data:       { stroke: '#3b82f6' },                      // Blue - Data flow
-  control:    { stroke: '#10b981' },                      // Green - Sequential control
-  event:      { stroke: '#a855f7' },                      // Purple - Event/Hook triggers
-  failover:   { stroke: '#ef4444', strokeDasharray: '5,5' }, // Red dashed
-  default:    { stroke: '#b1b1b7', strokeDasharray: '5,5' }, // Grey dashed
+// Phase 6.2 Fix: Explicit strokeDasharray: 'none' for solid lines to prevent phantom dashes
+const EDGE_STYLES: Record<string, { stroke: string; strokeDasharray: string }> = {
+  delegation: { stroke: '#f97316', strokeDasharray: 'none' },  // Orange SOLID - Director → Lead
+  data:       { stroke: '#3b82f6', strokeDasharray: 'none' },  // Blue SOLID - Data flow
+  control:    { stroke: '#10b981', strokeDasharray: 'none' },  // Green SOLID - Sequential control
+  event:      { stroke: '#a855f7', strokeDasharray: 'none' },  // Purple SOLID - Event/Hook triggers
+  failover:   { stroke: '#ef4444', strokeDasharray: '5,5' },   // Red DASHED - Backup/failover
+  default:    { stroke: '#b1b1b7', strokeDasharray: '5,5' },   // Grey DASHED - Untyped
 };
 
 // Map NodeType to React Flow component type
@@ -90,16 +92,16 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
     const isAgent = normalizedType === 'AGENT';
 
     // ✅ Phase 5.1 Fix: Robust config extraction - handle nested or flat data
-    const incomingConfig = payload.data?.config || payload.data || {};
+    const incomingConfig = (payload.data?.config || payload.data || {}) as Record<string, unknown>;
 
     // ✅ Phase 5.1 Fix: Ghost Config Bug - only use incoming values if truthy (not empty string)
     const mergedConfig = isAgent ? {
       ...AGENT_DEFAULTS,
       // Only override if incoming value is NOT empty string
-      provider: incomingConfig.provider || AGENT_DEFAULTS.provider,
-      model: incomingConfig.model || AGENT_DEFAULTS.model,
-      role: incomingConfig.role || AGENT_DEFAULTS.role,
-      temperature: incomingConfig.temperature ?? AGENT_DEFAULTS.temperature,
+      provider: (incomingConfig.provider as string) || AGENT_DEFAULTS.provider,
+      model: (incomingConfig.model as string) || AGENT_DEFAULTS.model,
+      role: (incomingConfig.role as string) || AGENT_DEFAULTS.role,
+      temperature: (incomingConfig.temperature as number) ?? AGENT_DEFAULTS.temperature,
       // Include any other fields from incoming config
       ...Object.fromEntries(
         Object.entries(incomingConfig).filter(([k]) =>
@@ -116,6 +118,9 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
       extent: payload.parentId ? 'parent' : undefined,
       expandParent: payload.parentId ? true : undefined,
 
+      // ✅ Phase 6.2 Fix: Z-index control - containers in back, agents in front
+      zIndex: isContainer ? -1 : 10,
+
       data: {
         // ✅ CRITICAL: Spread payload.data FIRST so our fixes override it
         ...payload.data,
@@ -128,8 +133,14 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
       },
 
       // ✅ Phase 5 Fix: Smart container sizing (1800px for Departments, 500x800 for Pools)
+      // ✅ Phase 6.2 Fix: Added pointerEvents: 'none' for containers to let clicks pass through
       style: isContainer
-        ? { width: size.width, height: size.height, ...(payload as any).style }
+        ? {
+            width: size.width,
+            height: size.height,
+            pointerEvents: 'none' as const,  // Let clicks pass through to canvas/children
+            ...(payload as any).style,
+          }
         : (payload as any).style,
     };
 
@@ -187,11 +198,18 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
       // ✅ Phase 5 Fix: Use smoothstep for clean 90-degree routing
       type: 'smoothstep',
       animated: true,
+
+      // ✅ Phase 6.2 Fix: Make edges easier to click
+      focusable: true,
+      interactionWidth: 20,  // 20px invisible hit buffer around edge
+
       // ✅ Phase 5.1 Fix: Semantic colors (orange=delegation, blue=data, etc.)
+      // ✅ Phase 6.2 Fix: Added cursor: 'pointer' for visual feedback
       style: {
         stroke: style.stroke,
         strokeWidth: 2,
         strokeDasharray: style.strokeDasharray,
+        cursor: 'pointer',
       },
       markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke },
       data: { ...payload.data, edgeType },
