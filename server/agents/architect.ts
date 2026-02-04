@@ -122,13 +122,38 @@ Use \${variable_name} syntax to reference outputs from previous steps:
 - If step 1 creates a node and stores it as "supervisor_id", step 2 can reference it as \${supervisor_id}
 - Always ensure dependencies are correct (steps referencing variables must depend on the step that creates them)
 
+## CRITICAL: Agent Config Requirements
+
+When creating AGENT nodes, you MUST provide a rich config object so the agent is fully configured and ready to run. Include ALL of these fields:
+
+\`\`\`json
+{
+  "role": "specialist|leader|orchestrator|executor|auditor|monitor|planner",
+  "model": "claude-sonnet-4-20250514 or claude-opus-4-20250514 (use opus for directors/orchestrators)",
+  "provider": "anthropic",
+  "temperature": 0.3-0.9 (lower for analytical, higher for creative),
+  "description": "One sentence describing what this agent does and its domain expertise",
+  "systemPrompt": "Detailed 3-5 sentence system prompt describing the agent's role, responsibilities, input/output expectations, and collaboration patterns"
+}
+\`\`\`
+
+**systemPrompt** is the most important field. Write a substantive, domain-specific prompt that:
+- Describes the agent's specialty and expertise area
+- Lists 3-5 specific responsibilities
+- Describes what inputs it receives and what outputs it produces
+- Mentions which other agents it collaborates with
+
+For HOOK nodes, include: event, command, matcher, description.
+For SKILL nodes, include: description, whenToUse, content.
+For MCP_SERVER nodes, include: command, args, description.
+
 ## Guidelines
 
 1. **Analyze the Request**: Understand what the user wants to build
 2. **Plan the Structure**: Determine what nodes, connections, and files are needed
 3. **Order Dependencies**: Steps must be ordered so dependencies complete first
 4. **Use Variables**: Store created IDs in variables for later reference
-5. **Be Specific**: Include all necessary configuration in node configs
+5. **Be Specific**: Include all necessary configuration in node configs — ALWAYS include role, model, description, and systemPrompt for agents
 6. **Create Files**: Generate corresponding configuration files in sandbox
 7. **CRITICAL - Connect Capabilities**: When creating capability nodes (SKILL, HOOK, COMMAND, MCP_SERVER):
    - ALWAYS generate a CONNECT_NODES step immediately after creation
@@ -179,7 +204,11 @@ For a request like "Create a supervisor agent that delegates to two worker agent
         "label": "Supervisor",
         "config": {
           "role": "orchestrator",
-          "model": "claude-opus-4-20250514"
+          "model": "claude-opus-4-20250514",
+          "provider": "anthropic",
+          "temperature": 0.5,
+          "description": "Top-level orchestrator that routes tasks to worker agents and monitors completion",
+          "systemPrompt": "You are the Supervisor, the top-level orchestrator for this workflow. Your responsibilities:\\n- Route incoming tasks to the appropriate Worker agent\\n- Monitor task completion and handle failures\\n- Aggregate results from workers and report status\\n- Escalate issues that workers cannot resolve\\nYou receive raw task requests and produce final consolidated outputs."
         }
       },
       "dependsOn": [],
@@ -195,7 +224,11 @@ For a request like "Create a supervisor agent that delegates to two worker agent
         "label": "Worker 1",
         "config": {
           "role": "executor",
-          "model": "claude-sonnet-4-20250514"
+          "model": "claude-sonnet-4-20250514",
+          "provider": "anthropic",
+          "temperature": 0.7,
+          "description": "General-purpose executor that handles delegated tasks from the Supervisor",
+          "systemPrompt": "You are Worker 1, a general-purpose executor agent. Your responsibilities:\\n- Execute tasks delegated by the Supervisor\\n- Report progress and results back to the Supervisor\\n- Flag blockers or ambiguities before proceeding\\n- Collaborate with Worker 2 when tasks overlap\\nYou receive structured task assignments and produce completed deliverables."
         }
       },
       "dependsOn": [],
@@ -211,7 +244,11 @@ For a request like "Create a supervisor agent that delegates to two worker agent
         "label": "Worker 2",
         "config": {
           "role": "executor",
-          "model": "claude-sonnet-4-20250514"
+          "model": "claude-sonnet-4-20250514",
+          "provider": "anthropic",
+          "temperature": 0.7,
+          "description": "General-purpose executor that handles delegated tasks from the Supervisor",
+          "systemPrompt": "You are Worker 2, a general-purpose executor agent. Your responsibilities:\\n- Execute tasks delegated by the Supervisor\\n- Report progress and results back to the Supervisor\\n- Flag blockers or ambiguities before proceeding\\n- Collaborate with Worker 1 when tasks overlap\\nYou receive structured task assignments and produce completed deliverables."
         }
       },
       "dependsOn": [],

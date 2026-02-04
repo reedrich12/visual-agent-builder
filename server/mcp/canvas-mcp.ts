@@ -73,6 +73,230 @@ Your responsibilities:
 Always be helpful, accurate, and concise in your responses.`;
 }
 
+// =============================================================================
+// Phase 7: Comprehensive Node Defaults
+// =============================================================================
+// When nodes are created by the Builder, they often arrive with sparse config.
+// These defaults ensure every node type is "ready to run" out of the box.
+
+/**
+ * Infer the best model for an agent based on its role.
+ * Leaders/orchestrators get Opus, specialists get Sonnet.
+ */
+function inferModel(role?: string): string {
+  const leaderRoles = ['orchestrator', 'leader', 'router', 'director', 'supervisor'];
+  if (role && leaderRoles.some(r => role.toLowerCase().includes(r))) {
+    return 'claude-opus-4-20250514';
+  }
+  return 'claude-sonnet-4-20250514';
+}
+
+/**
+ * Infer the temperature for an agent based on its role.
+ * Creative roles get higher temp, analytical roles get lower.
+ */
+function inferTemperature(role?: string, label?: string): number {
+  const creativeKeywords = ['writer', 'script', 'creative', 'brief', 'outreach', 'content'];
+  const analyticalKeywords = ['analyst', 'assessment', 'risk', 'legal', 'normaliz', 'parser', 'monitor', 'audit'];
+  const combined = `${role || ''} ${label || ''}`.toLowerCase();
+  if (creativeKeywords.some(k => combined.includes(k))) return 0.8;
+  if (analyticalKeywords.some(k => combined.includes(k))) return 0.3;
+  return 0.7;
+}
+
+/**
+ * Infer permissions based on the agent's role and label.
+ */
+function inferPermissions(role?: string, label?: string): Record<string, unknown> {
+  const combined = `${role || ''} ${label || ''}`.toLowerCase();
+  const isLeader = ['lead', 'director', 'supervisor', 'orchestrator'].some(k => combined.includes(k));
+  return {
+    permissionMode: isLeader ? 'full' : 'default',
+    disallowedTools: [],
+    requiresApprovalFor: isLeader ? [] : ['Shell Commands'],
+  };
+}
+
+/**
+ * Infer guardrails based on agent purpose.
+ */
+function inferGuardrails(role?: string, label?: string): Record<string, unknown> {
+  const combined = `${role || ''} ${label || ''}`.toLowerCase();
+  const isOutward = ['outreach', 'email', 'follow-up', 'script'].some(k => combined.includes(k));
+  return {
+    tokenLimit: 100000,
+    costCap: 10.00,
+    timeout: 300,
+    maxRetries: 3,
+    filterProfanity: true,
+    filterPII: isOutward,
+    promptInjectionDetection: true,
+  };
+}
+
+/**
+ * Generate comprehensive defaults for an AGENT node.
+ * Merges incoming config on top of intelligent defaults.
+ */
+function enrichAgentConfig(label: string, incoming: Record<string, unknown>): Record<string, unknown> {
+  const role = (incoming.role as string) || 'specialist';
+  const model = (incoming.model as string) || inferModel(role);
+  const temperature = (incoming.temperature as number) ?? inferTemperature(role, label);
+  const permissions = inferPermissions(role, label);
+  const guardrails = inferGuardrails(role, label);
+
+  const defaults: Record<string, unknown> = {
+    // Identity
+    name: label,
+    description: incoming.description || `${label} - ${role} agent`,
+    teamName: '',
+
+    // Agent Role
+    roleCategory: inferRoleCategory(role),
+    role: role,
+
+    // Model
+    provider: 'anthropic',
+    model: model,
+    temperature: temperature,
+    thinkingMode: '',
+    contextWindow: '',
+    reservedOutputTokens: '',
+
+    // Permissions
+    ...permissions,
+
+    // Capabilities
+    skills: [],
+    mcps: [],
+    commands: [],
+
+    // System Prompt
+    systemPrompt: generateDefaultSystemPrompt(label, role),
+
+    // Advanced
+    maxTokens: 4096,
+    topP: 0.1,
+    failoverAgents: [],
+
+    // Guardrails
+    ...guardrails,
+
+    // Observability
+    logLevel: 'info',
+    logDestinations: 'console',
+    enableMetrics: true,
+    enableTracing: false,
+
+    // Memory & Context
+    contextPersistence: 'session',
+    memoryType: 'conversation',
+    maxContextTokens: 8000,
+    summarizationThreshold: 6000,
+  };
+
+  // Overlay incoming values (skip empty strings)
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value !== '' && value !== undefined && value !== null) {
+      defaults[key] = value;
+    }
+  }
+
+  return defaults;
+}
+
+/**
+ * Infer role category from role string.
+ */
+function inferRoleCategory(role: string): string {
+  const r = role.toLowerCase();
+  if (['solo'].includes(r)) return 'Independent';
+  if (['leader', 'orchestrator', 'router', 'director', 'supervisor'].some(k => r.includes(k))) return 'Coordinator';
+  if (['auditor', 'monitor', 'planner'].some(k => r.includes(k))) return 'Continuous';
+  return 'Team'; // specialist, member, executor, critic
+}
+
+/**
+ * Generate defaults for a HOOK node.
+ */
+function enrichHookConfig(label: string, incoming: Record<string, unknown>): Record<string, unknown> {
+  return {
+    name: label,
+    description: incoming.description || `${label} hook`,
+    event: incoming.event || 'PostToolUse',
+    command: incoming.command || 'echo "Hook triggered"',
+    matcher: incoming.matcher || '*',
+    ...incoming,
+  };
+}
+
+/**
+ * Generate defaults for an MCP_SERVER node.
+ */
+function enrichMCPConfig(label: string, incoming: Record<string, unknown>): Record<string, unknown> {
+  return {
+    name: label,
+    description: incoming.description || `${label} MCP server`,
+    command: incoming.command || 'npx',
+    args: incoming.args || [],
+    env: incoming.env || {},
+    ...incoming,
+  };
+}
+
+/**
+ * Generate defaults for a COMMAND node.
+ */
+function enrichCommandConfig(label: string, incoming: Record<string, unknown>): Record<string, unknown> {
+  return {
+    name: label,
+    description: incoming.description || `${label} command`,
+    content: incoming.content || '',
+    triggers: incoming.triggers || [],
+    ...incoming,
+  };
+}
+
+/**
+ * Generate defaults for a SKILL node.
+ */
+function enrichSkillConfig(label: string, incoming: Record<string, unknown>): Record<string, unknown> {
+  return {
+    name: label,
+    description: incoming.description || `${label} skill`,
+    content: incoming.content || '',
+    whenToUse: incoming.whenToUse || '',
+    whenNotToUse: incoming.whenNotToUse || '',
+    triggers: incoming.triggers || [],
+    ...incoming,
+  };
+}
+
+/**
+ * Phase 7: Master enrichment dispatcher.
+ * Routes to the appropriate enrichment function based on node type.
+ */
+function enrichNodeConfig(type: string, label: string, incoming: Record<string, unknown>): Record<string, unknown> {
+  switch (type) {
+    case 'AGENT':
+      return enrichAgentConfig(label, incoming);
+    case 'HOOK':
+      return enrichHookConfig(label, incoming);
+    case 'MCP_SERVER':
+      return enrichMCPConfig(label, incoming);
+    case 'COMMAND':
+      return enrichCommandConfig(label, incoming);
+    case 'SKILL':
+      return enrichSkillConfig(label, incoming);
+    case 'DEPARTMENT':
+      return { name: label, description: incoming.description || `${label} department`, color: incoming.color || 'slate', priority: incoming.priority || 5, ...incoming };
+    case 'AGENT_POOL':
+      return { name: label, description: incoming.description || `${label} pool`, scalingPolicy: incoming.scalingPolicy || 'fixed', ...incoming };
+    default:
+      return { name: label, ...incoming };
+  }
+}
+
 /**
  * Normalize a node type string to the UPPERCASE_UNDERSCORE format
  * expected by the frontend schema system.
@@ -171,21 +395,11 @@ export function canvas_create_node(params: CreateNodeParams): ToolResult<CreateN
     // Normalize the node type to UPPERCASE_UNDERSCORE format
     const normalizedType = normalizeNodeType(params.type);
 
-    // ✅ Phase 6.2 Fix: Inject system prompt for agents if not provided
-    let enrichedConfig = params.config || {};
-    if (normalizedType === 'AGENT') {
-      const configWithPrompt = enrichedConfig as Record<string, unknown>;
-      if (!configWithPrompt.systemPrompt) {
-        enrichedConfig = {
-          ...configWithPrompt,
-          systemPrompt: generateDefaultSystemPrompt(
-            params.label,
-            configWithPrompt.role as string | undefined
-          ),
-        };
-        console.log(`[Canvas] Auto-generated system prompt for agent: ${params.label}`);
-      }
-    }
+    // ✅ Phase 7: Comprehensive config enrichment for ALL node types
+    // Merges intelligent defaults under the incoming config so agents/hooks/skills
+    // are immediately runnable and fully configured in the Properties panel.
+    const enrichedConfig = enrichNodeConfig(normalizedType, params.label, params.config || {});
+    console.log(`[Canvas] Enriched config for ${normalizedType} "${params.label}" — ${Object.keys(enrichedConfig).length} properties`);
 
     // Create node in state
     const node: CanvasNode = {

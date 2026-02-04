@@ -28,12 +28,14 @@ const DEFAULT_SIZES: Record<string, { width: number; height: number }> = {
   DEFAULT: { width: 400, height: 300 },      // Fallback for other containers
 };
 
-// Default config so agents are immediately runnable
+// Phase 7: Minimal client-side fallback defaults. The server (canvas_create_node)
+// now generates comprehensive configs with enrichNodeConfig(), so these are only
+// used as a safety net if the server sends sparse data.
 const AGENT_DEFAULTS = {
   provider: 'anthropic',
-  model: 'claude-3-5-sonnet-latest',
+  model: 'claude-sonnet-4-20250514',
   temperature: 0.7,
-  role: 'executor',
+  role: 'specialist',
 };
 
 // Phase 6.3: Edge styles now imported from centralized config
@@ -112,8 +114,10 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
       extent: payload.parentId ? 'parent' : undefined,
       expandParent: payload.parentId ? true : undefined,
 
-      // ✅ Phase 6.2 Fix: Z-index control - containers in back, agents in front
-      zIndex: isContainer ? -1 : 10,
+      // ✅ Phase 7 Fix: Z-index control
+      // Containers at 0 (not -1 which pushed them behind the React Flow edge SVG layer)
+      // Agents at 10 to sit above containers. Edges naturally render between 0 and 10.
+      zIndex: isContainer ? 0 : 10,
 
       data: {
         // ✅ CRITICAL: Spread payload.data FIRST so our fixes override it
@@ -127,12 +131,14 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
       },
 
       // ✅ Phase 5 Fix: Smart container sizing (1800px for Departments, 500x800 for Pools)
-      // ✅ Phase 6.2 Fix: Added pointerEvents: 'none' for containers to let clicks pass through
+      // ✅ Phase 7 Fix: Removed pointerEvents: 'none' from node-level style.
+      // GroupNode.tsx handles pointer-events internally (header=auto, body=none).
+      // Setting it at node-level was blocking the React Flow edge interaction layer,
+      // preventing users from clicking edges that overlap container areas.
       style: isContainer
         ? {
             width: size.width,
             height: size.height,
-            pointerEvents: 'none' as const,  // Let clicks pass through to canvas/children
             ...(payload as any).style,
           }
         : (payload as any).style,

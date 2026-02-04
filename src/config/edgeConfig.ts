@@ -39,5 +39,7 @@ export function getEdgeParams(edgeType: string = 'default') {
     markerEnd: { type: MarkerType.ArrowClosed, color: config.stroke },
     interactionWidth: 25,  // Thick invisible hit-area for easier clicking
     focusable: true,
+    // Phase 7: Ensure edges render above container nodes (zIndex: 0) but below agents (zIndex: 10)
+    zIndex: 5,
   };
 }

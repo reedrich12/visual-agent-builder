@@ -682,6 +682,9 @@ export interface EdgeTypeInfo {
   animated: boolean;
 }
 
+// Phase 7: Synced with src/config/edgeConfig.ts to be single source of truth for colors.
+// All edge types are SOLID lines except failover (dashed) and default (dashed).
+// This matches what edgeConfig.ts sends to React Flow's style prop.
 export const EDGE_TYPE_INFO: Record<EdgeType, EdgeTypeInfo> = {
   data: {
     type: 'data',
@@ -693,15 +696,15 @@ export const EDGE_TYPE_INFO: Record<EdgeType, EdgeTypeInfo> = {
   control: {
     type: 'control',
     displayName: 'Control Flow',
-    color: '#22c55e', // green-500
-    strokeStyle: 'dashed',
+    color: '#10b981', // emerald-500 (was green-500, synced with edgeConfig)
+    strokeStyle: 'solid', // Phase 7 fix: was 'dashed', now solid to match edgeConfig
     animated: false,
   },
   event: {
     type: 'event',
     displayName: 'Event',
     color: '#a855f7', // purple-500
-    strokeStyle: 'dotted',
+    strokeStyle: 'solid', // Phase 7 fix: was 'dotted', now solid to match edgeConfig
     animated: false,
   },
   delegation: {
