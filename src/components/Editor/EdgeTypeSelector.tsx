@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { EdgeType, EDGE_TYPE_INFO } from '../../types/core';
-import { Database, GitBranch, Zap, Users, AlertTriangle } from 'lucide-react';
+import { Database, GitBranch, Zap, Users, AlertTriangle, Link } from 'lucide-react';
 
 interface EdgeTypeSelectorProps {
   position: { x: number; y: number };
@@ -14,6 +14,7 @@ const edgeTypeIcons: Record<EdgeType, React.ElementType> = {
   event: Zap,
   delegation: Users,
   failover: AlertTriangle,
+  default: Link,
 };
 
 export const EdgeTypeSelector = ({ position, onSelect, onCancel }: EdgeTypeSelectorProps) => {

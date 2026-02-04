@@ -15,6 +15,7 @@ import {
 import { EdgeType } from '../types/core';
 import { WorkflowConfig, DEFAULT_WORKFLOW_CONFIG } from '../types/config';
 import { needsMigration, migrateWorkflow } from '../utils/workflowMigration';
+import { getEdgeParams } from '../config/edgeConfig';
 
 // Re-export WorkflowConfig for backwards compatibility
 export type { WorkflowConfig } from '../types/config';
@@ -47,6 +48,7 @@ interface StoreState {
   nodes: Node[];
   edges: Edge[];
   selectedNode: Node | null;
+  selectedEdge: Edge | null;  // Phase 6.3: Track selected edge
   libraryCategory: string;
   addToAgentMode: boolean;
   workflowConfig: WorkflowConfig;
@@ -58,9 +60,12 @@ interface StoreState {
   onConnect: OnConnect;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
+  addEdge: (edge: Edge) => void;
   addNode: (node: Node) => void;
   setSelectedNode: (node: Node | null) => void;
+  setSelectedEdge: (edge: Edge | null) => void;  // Phase 6.3: Select edge action
   updateNodeData: (nodeId: string, newData: any) => void;
+  updateEdgeType: (edgeId: string, newType: string) => void;  // Phase 6.3: Update edge type
   setLibraryCategory: (category: string, addToAgentMode?: boolean) => void;
   // Workflow config
   setWorkflowConfig: (config: Partial<WorkflowConfig>) => void;
@@ -82,6 +87,7 @@ const useStore = create<StoreState>((set, get) => ({
   nodes: [],
   edges: [],
   selectedNode: null,
+  selectedEdge: null,  // Phase 6.3: Track selected edge
   libraryCategory: 'agents',
   addToAgentMode: false,
   workflowConfig: DEFAULT_WORKFLOW_CONFIG,
@@ -114,12 +120,24 @@ const useStore = create<StoreState>((set, get) => ({
   },
   setEdges: (edges) => set({ edges }),
 
+  // Phase 6.3 v4: Append a single edge using get() for fresh state
+  // Eliminates stale closure bug when Builder creates many edges in rapid succession
+  addEdge: (edge) => {
+    set({ edges: [...get().edges, edge] });
+  },
+
   addNode: (node) => {
     set({ nodes: [...get().nodes, node] });
   },
 
   setSelectedNode: (node) => {
-    set({ selectedNode: node });
+    // Phase 6.3: Deselect edge when selecting a node
+    set({ selectedNode: node, selectedEdge: null });
+  },
+
+  // Phase 6.3: Select edge (deselects any selected node)
+  setSelectedEdge: (edge) => {
+    set({ selectedEdge: edge, selectedNode: null });
   },
 
   updateNodeData: (nodeId, newData) => {
@@ -136,6 +154,25 @@ const useStore = create<StoreState>((set, get) => ({
         return node;
       }),
     });
+  },
+
+  // Phase 6.3: Update edge type with visual params from centralized config
+  updateEdgeType: (edgeId, newType) => {
+    const params = getEdgeParams(newType);
+    const newEdges = get().edges.map((edge) =>
+      edge.id === edgeId
+        // Update edge with new params and store type in data
+        ? { ...edge, ...params, data: { ...edge.data, type: newType } }
+        : edge
+    );
+
+    // Keep selectedEdge in sync if it's the one being updated
+    const selectedEdge = get().selectedEdge;
+    const newSelection = selectedEdge?.id === edgeId
+      ? newEdges.find((e) => e.id === edgeId) || null
+      : selectedEdge;
+
+    set({ edges: newEdges, selectedEdge: newSelection });
   },
 
   setLibraryCategory: (category, addToAgentMode = false) => {

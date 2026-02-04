@@ -1,5 +1,5 @@
 import { Node, Edge } from 'reactflow';
-import { Workflow, Connection } from '../types/core';
+import { Workflow, Connection, EdgeType } from '../types/core';
 
 export const generateWorkflowJson = (nodes: Node[], edges: Edge[], name: string = 'New Workflow'): Workflow => {
   return {
@@ -13,7 +13,8 @@ export const generateWorkflowJson = (nodes: Node[], edges: Edge[], name: string 
     })), 
     edges: edges.map(e => {
         // Safe casting or validation logic
-        const type = (['data', 'control', 'event'].includes(e.type || '') ? e.type : undefined) as 'data' | 'control' | 'event' | undefined;
+        // Phase 6.3 v4: Include ALL valid edge types (was missing delegation, failover, default)
+        const type = (['data', 'control', 'event', 'delegation', 'failover', 'default'].includes(e.type || '') ? e.type : undefined) as EdgeType | undefined;
         
         return {
             id: e.id,

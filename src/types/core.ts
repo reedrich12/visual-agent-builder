@@ -19,7 +19,7 @@ export type NodeType =
 export type ContainerNodeType = 'DEPARTMENT' | 'AGENT_POOL';
 
 // Edge/Connection types for typed workflows
-export type EdgeType = 'data' | 'control' | 'event' | 'delegation' | 'failover';
+export type EdgeType = 'data' | 'control' | 'event' | 'delegation' | 'failover' | 'default';
 
 // ============================================================================
 // Position & Base Interfaces
@@ -709,12 +709,19 @@ export const EDGE_TYPE_INFO: Record<EdgeType, EdgeTypeInfo> = {
     displayName: 'Delegation',
     color: '#f97316', // orange-500
     strokeStyle: 'solid',
-    animated: true,
+    animated: false,
   },
   failover: {
     type: 'failover',
     displayName: 'Failover',
     color: '#ef4444', // red-500
+    strokeStyle: 'dashed',
+    animated: false,
+  },
+  default: {
+    type: 'default',
+    displayName: 'Default',
+    color: '#b1b1b7', // gray
     strokeStyle: 'dashed',
     animated: false,
   },

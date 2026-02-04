@@ -127,7 +127,8 @@ interface CanvasEdge {
 }
 
 // In-memory canvas state (per session, to be enhanced later)
-const canvasState: {
+// Phase 6.3: Exported for socket handler access
+export const canvasState: {
   nodes: Map<string, CanvasNode>;
   edges: Map<string, CanvasEdge>;
 } = {
@@ -592,8 +593,9 @@ function setNestedProperty(
 
 /**
  * Persist the current canvas layout to sandbox/layout.json
+ * Phase 6.3: Exported for socket handler access
  */
-async function persistLayout(): Promise<void> {
+export async function persistLayout(): Promise<void> {
   try {
     const state = canvas_get_state();
     if (state.success && state.data) {

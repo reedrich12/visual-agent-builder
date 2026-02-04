@@ -8,7 +8,7 @@ import { TypedSocket, TypedSocketServer } from './emitter';
 import { SessionMessage } from '../../shared/socket-events';
 import { Session } from '../types/session';
 import { createSupervisorAgent, SupervisorAgent } from '../agents/supervisor';
-import { canvas_sync_from_client } from '../mcp/canvas-mcp';
+import { canvas_sync_from_client, canvasState, persistLayout } from '../mcp/canvas-mcp';
 import { simulateSystemStart } from '../services/runtime';
 
 // In-memory session store (will be replaced with proper store later)
@@ -270,6 +270,26 @@ export function setupSocketHandlers(io: TypedSocketServer): void {
       const { sessionId } = payload;
       console.log(`[Socket] System stopped for session: ${sessionId}`);
       // Future: implement actual process termination
+    });
+
+    // Phase 6.3: Handle edge type update from Properties Panel
+    socket.on('canvas:update_edge' as any, async (payload: { edgeId: string; changes: { data?: Record<string, unknown> } }) => {
+      const { edgeId, changes } = payload;
+
+      // 1. Update In-Memory State
+      const edge = canvasState.edges.get(edgeId);
+      if (edge) {
+        if (changes.data) {
+          edge.data = { ...edge.data, ...changes.data };
+        }
+        canvasState.edges.set(edgeId, edge);
+
+        // 2. Persist to Disk (layout.json)
+        await persistLayout();
+        console.log(`[Socket] Updated edge ${edgeId} type to: ${changes.data?.type}`);
+      } else {
+        console.warn(`[Socket] Edge not found for update: ${edgeId}`);
+      }
     });
 
     // Handle disconnect

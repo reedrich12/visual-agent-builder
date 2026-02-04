@@ -4,9 +4,10 @@
 // =============================================================================
 
 import { useCallback, useEffect } from 'react';
-import { Node, Edge, MarkerType } from 'reactflow';
+import { Node, Edge } from 'reactflow';
 import { useSocket, UseSocketReturn } from './useSocket';
 import useStore from '../store/useStore';
+import { getEdgeParams } from '../config/edgeConfig';
 import {
   CanvasNodePayload,
   CanvasNodeUpdatePayload,
@@ -35,16 +36,8 @@ const AGENT_DEFAULTS = {
   role: 'executor',
 };
 
-// Semantic edge colors matching UI design
-// Phase 6.2 Fix: Explicit strokeDasharray: 'none' for solid lines to prevent phantom dashes
-const EDGE_STYLES: Record<string, { stroke: string; strokeDasharray: string }> = {
-  delegation: { stroke: '#f97316', strokeDasharray: 'none' },  // Orange SOLID - Director → Lead
-  data:       { stroke: '#3b82f6', strokeDasharray: 'none' },  // Blue SOLID - Data flow
-  control:    { stroke: '#10b981', strokeDasharray: 'none' },  // Green SOLID - Sequential control
-  event:      { stroke: '#a855f7', strokeDasharray: 'none' },  // Purple SOLID - Event/Hook triggers
-  failover:   { stroke: '#ef4444', strokeDasharray: '5,5' },   // Red DASHED - Backup/failover
-  default:    { stroke: '#b1b1b7', strokeDasharray: '5,5' },   // Grey DASHED - Untyped
-};
+// Phase 6.3: Edge styles now imported from centralized config
+// See src/config/edgeConfig.ts for EDGE_TYPES and getEdgeParams()
 
 // Map NodeType to React Flow component type
 const nodeTypeToComponent: Record<string, string> = {
@@ -73,6 +66,7 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
     nodes,
     edges,
     addNode,
+    addEdge,
     setNodes,
     setEdges,
     updateNodeData,
@@ -186,39 +180,24 @@ export function useHeadlessSession(): UseHeadlessSessionReturn {
   }, [nodes, edges, setNodes, setEdges]);
 
   // Handle edge created from server
+  // Phase 6.3 v4: Uses addEdge() which reads fresh state via get() inside store
+  // This eliminates the stale closure bug when Builder creates many edges in rapid succession
   const handleEdgeCreated = useCallback((payload: CanvasEdgePayload) => {
-    // ✅ Phase 5.1 Fix: Apply semantic edge colors based on type
     const edgeType = (payload.edgeType || (payload.data as any)?.type || 'default').toLowerCase();
-    const style = EDGE_STYLES[edgeType] || EDGE_STYLES.default;
+    const params = getEdgeParams(edgeType);
 
     const newEdge: Edge = {
       id: payload.edgeId,
       source: payload.sourceId,
       target: payload.targetId,
-      // ✅ Phase 5 Fix: Use smoothstep for clean 90-degree routing
-      type: 'smoothstep',
-      animated: true,
-
-      // ✅ Phase 6.2 Fix: Make edges easier to click
-      focusable: true,
-      interactionWidth: 20,  // 20px invisible hit buffer around edge
-
-      // ✅ Phase 5.1 Fix: Semantic colors (orange=delegation, blue=data, etc.)
-      // ✅ Phase 6.2 Fix: Added cursor: 'pointer' for visual feedback
-      style: {
-        stroke: style.stroke,
-        strokeWidth: 2,
-        strokeDasharray: style.strokeDasharray,
-        cursor: 'pointer',
-      },
-      markerEnd: { type: MarkerType.ArrowClosed, color: style.stroke },
-      data: { ...payload.data, edgeType },
+      ...params,  // Spread all params (type, style, markerEnd, interactionWidth, focusable, animated)
+      data: { ...payload.data, type: edgeType },  // Use 'type' not 'edgeType' for consistency
     };
 
-    // ✅ Phase 5 Fix: Use Zustand store's setEdges for state management
-    setEdges([...edges, newEdge]);
-    console.log(`[Headless] Edge created: ${payload.edgeId} (type: ${edgeType}, color: ${style.stroke})`);
-  }, [edges, setEdges]);
+    // Phase 6.3 v4: Use addEdge() — reads fresh edges via get() inside store, no stale closure
+    addEdge(newEdge);
+    console.log(`[Headless] Edge created: ${payload.edgeId} (type: ${edgeType})`);
+  }, [addEdge]);
 
   // Handle edge deleted from server
   const handleEdgeDeleted = useCallback((edgeId: string) => {

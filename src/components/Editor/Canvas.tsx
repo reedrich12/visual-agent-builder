@@ -17,11 +17,12 @@ import { CustomNode } from './Nodes/CustomNode';
 import { DepartmentNode } from './Nodes/DepartmentNode';
 import { AgentPoolNode } from './Nodes/AgentPoolNode';
 import { MCPServerNode } from './Nodes/MCPServerNode';
-import { DataEdge, ControlEdge, EventEdge, DelegationEdge, FailoverEdge } from './Edges';
+import { DataEdge, ControlEdge, EventEdge, DelegationEdge, FailoverEdge, DefaultEdge } from './Edges';
 import { EdgeTypeSelector } from './EdgeTypeSelector';
 import { NodeType, EdgeType, isContainerType } from '../../types/core';
 import { Toolbar } from './Toolbar';
 import { fetchComponentContent, BundleData, BundleComponent } from '../../services/api';
+import { getEdgeParams } from '../../config/edgeConfig';
 
 // Map bundle component categories to NodeTypes
 const categoryToNodeType: Record<string, NodeType> = {
@@ -57,13 +58,14 @@ const nodeTypes = {
   mcpServerNode: MCPServerNode,
 };
 
-// Define edge types map
+// Define edge types map - keys must match semantic type returned by getEdgeParams()
 const edgeTypes = {
   data: DataEdge,
   control: ControlEdge,
   event: EventEdge,
   delegation: DelegationEdge,
   failover: FailoverEdge,
+  default: DefaultEdge,
 };
 
 let id = 0;
@@ -79,9 +81,7 @@ const CanvasContent = () => {
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [selectorPosition, setSelectorPosition] = useState<{ x: number; y: number } | null>(null);
 
-  // Phase 6: State for selected edge
-  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
-
+  // Phase 6.3: Get edge selection from store (not local state)
   const {
     nodes,
     edges,
@@ -89,6 +89,8 @@ const CanvasContent = () => {
     onEdgesChange,
     addNode,
     setSelectedNode,
+    setSelectedEdge,
+    selectedEdge,
     setEdges,
   } = useStore();
 
@@ -218,24 +220,22 @@ const CanvasContent = () => {
   );
 
   const onSelectionChange = useCallback(({ nodes }: { nodes: Node[] }) => {
+    // Phase 6.3: setSelectedNode now auto-clears selectedEdge in store
     setSelectedNode(nodes[0] || null);
-    // Deselect edge when a node is selected
-    if (nodes.length > 0) {
-      setSelectedEdge(null);
-    }
   }, [setSelectedNode]);
 
-  // Phase 6: Handle edge click for selection
-  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
-    setSelectedEdge(edge.id);
-    setSelectedNode(null); // Deselect nodes when selecting an edge
+  // Phase 6.3: Handle edge click for selection (uses store action)
+  const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.stopPropagation();
     console.log('[Canvas] Edge selected:', edge.id, 'type:', edge.type);
-  }, [setSelectedNode]);
+    setSelectedEdge(edge);  // Store the full edge object
+  }, [setSelectedEdge]);
 
-  // Phase 6: Handle canvas click to deselect edge
+  // Phase 6.3: Handle canvas click to deselect both nodes and edges
   const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
     setSelectedEdge(null);
-  }, []);
+  }, [setSelectedNode, setSelectedEdge]);
 
   // Handle new connections - show edge type selector
   const handleConnect = useCallback((connection: Connection) => {
@@ -249,23 +249,27 @@ const CanvasContent = () => {
       setSelectorPosition({ x: screenPos.x, y: screenPos.y });
       setPendingConnection(connection);
     } else {
-      // Fallback: create edge with default type
+      // Fallback: create edge with default type using centralized config
+      const params = getEdgeParams('data');
       const newEdge = {
         ...connection,
         id: getEdgeId(),
-        type: 'data' as EdgeType,
+        ...params,
+        data: { type: 'data' },
       };
       setEdges(addEdge(newEdge, edges));
     }
   }, [nodes, edges, reactFlowInstance, setEdges]);
 
-  // Handle edge type selection
+  // Handle edge type selection - use centralized config for proper styling + interactionWidth
   const handleEdgeTypeSelect = useCallback((edgeType: EdgeType) => {
     if (pendingConnection) {
+      const params = getEdgeParams(edgeType);
       const newEdge = {
         ...pendingConnection,
         id: getEdgeId(),
-        type: edgeType,
+        ...params,
+        data: { type: edgeType },
       };
       setEdges(addEdge(newEdge, edges));
       setPendingConnection(null);
@@ -278,6 +282,13 @@ const CanvasContent = () => {
     setPendingConnection(null);
     setSelectorPosition(null);
   }, []);
+
+  // Phase 6.3: Compute visible edges with selection state for highlighting
+  const visibleEdges = edges.map(e => ({
+    ...e,
+    selected: e.id === selectedEdge?.id,  // React Flow highlights selected edges
+    zIndex: e.id === selectedEdge?.id ? 1000 : 0,  // Bring selected edge to front
+  }));
 
   return (
     <div className="flex-grow h-full relative" ref={reactFlowWrapper}>
@@ -295,7 +306,7 @@ const CanvasContent = () => {
       <Toolbar />
       <ReactFlow
         nodes={nodes}
-        edges={edges.map(e => ({ ...e, selected: e.id === selectedEdge }))}
+        edges={visibleEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
@@ -308,8 +319,9 @@ const CanvasContent = () => {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         elementsSelectable={true}
+        edgesFocusable={true}
         connectionMode={ConnectionMode.Loose}
-        defaultEdgeOptions={{ interactionWidth: 20 }}
+        defaultEdgeOptions={{ interactionWidth: 25 }}
         fitView
         className="bg-transparent"
       >

@@ -54,7 +54,7 @@ export const GroupNode = memo(({
           ${selected ? 'ring-2 ring-offset-2 ring-indigo-500' : ''}
           ${isCollapsed ? 'h-[60px]' : 'min-h-[150px] h-full'}
         `}
-        style={{ minWidth: `${minWidth}px` }}
+        style={{ minWidth: `${minWidth}px`, pointerEvents: 'none' }}
       >
         {/* Header */}
         <div
@@ -64,6 +64,7 @@ export const GroupNode = memo(({
             ${isCollapsed ? 'rounded-b-xl' : ''}
           `}
           onClick={handleToggleCollapse}
+          style={{ pointerEvents: 'auto' }}
         >
           {/* Collapse Toggle */}
           <button
@@ -112,7 +113,7 @@ export const GroupNode = memo(({
 
         {/* Content Area (when expanded) */}
         {!isCollapsed && (
-          <div className="p-4 bg-white/30 rounded-b-xl min-h-[90px]">
+          <div className="p-4 bg-white/30 rounded-b-xl min-h-[90px]" style={{ pointerEvents: 'none' }}>
             {/* This is where child nodes will be rendered by React Flow */}
             {childCount === 0 && (
               <div className="flex items-center justify-center h-full text-gray-400 text-sm">
@@ -127,11 +128,13 @@ export const GroupNode = memo(({
           type="target"
           position={Position.Top}
           className="!w-4 !h-2 !rounded-sm !bg-gray-400 !border-2 !border-white hover:!bg-indigo-500 transition-colors !-top-1"
+          style={{ pointerEvents: 'auto' }}
         />
         <Handle
           type="source"
           position={Position.Bottom}
           className="!w-4 !h-2 !rounded-sm !bg-gray-400 !border-2 !border-white hover:!bg-indigo-500 transition-colors !-bottom-1"
+          style={{ pointerEvents: 'auto' }}
         />
       </div>
     </>
