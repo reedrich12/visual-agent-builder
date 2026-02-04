@@ -12,7 +12,9 @@ interface ArrayFieldProps {
 
 export const ArrayField = ({ field, errors, watch, setValue }: ArrayFieldProps) => {
   const error = errors[field.key];
-  const items: string[] = watch(field.key) || [];
+  // Phase 7.1: Defensive — coerce non-array values to arrays
+  const rawItems = watch(field.key);
+  const items: string[] = Array.isArray(rawItems) ? rawItems : (rawItems ? [String(rawItems)] : []);
 
   const addItem = useCallback(() => {
     setValue(field.key, [...items, ''], { shouldDirty: true });

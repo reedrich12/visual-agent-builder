@@ -21,7 +21,9 @@ export const CapabilityField = ({ field, errors, watch, setValue }: CapabilityFi
   const { setLibraryCategory, selectedNode, updateNodeData } = useStore();
 
   const error = errors[field.key];
-  const capabilities: string[] = watch(field.key) || [];
+  // Phase 7.1: Defensive — coerce non-array values to arrays
+  const rawCaps = watch(field.key);
+  const capabilities: string[] = Array.isArray(rawCaps) ? rawCaps : (rawCaps ? [String(rawCaps)] : []);
 
   // Get capability config from node data
   const getCapabilityConfig = useCallback((name: string): CapabilityUsageConfig => {

@@ -6,6 +6,7 @@ import { ConfigModal } from './components/ConfigModal';
 import { StatusPanel } from './components/StatusPanel';
 import { ChatPanel } from './components/Chat';
 import { TerminalPanel } from './components/Terminal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { fetchInventory } from './services/api';
 import { Zap, Settings } from 'lucide-react';
 import useStore from './store/useStore';
@@ -81,11 +82,15 @@ function AppContent() {
 
         {/* Canvas Area */}
         <main className="flex-1 relative">
-          <Canvas />
+          <ErrorBoundary fallbackTitle="Canvas error">
+            <Canvas />
+          </ErrorBoundary>
         </main>
 
         {/* Properties Panel */}
-        <PropertiesPanel />
+        <ErrorBoundary fallbackTitle="Properties panel error">
+          <PropertiesPanel />
+        </ErrorBoundary>
       </div>
 
       {/* Footer Status Bar */}

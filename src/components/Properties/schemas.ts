@@ -133,9 +133,11 @@ export const providerOptions = [
 
 export const modelsByProvider: Record<string, { label: string; value: string }[]> = {
   anthropic: [
+    { label: 'Claude Sonnet 4', value: 'claude-sonnet-4-20250514' },
+    { label: 'Claude Opus 4', value: 'claude-opus-4-20250514' },
     { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20241022' },
-    { label: 'Claude 3 Opus', value: 'claude-3-opus-20240229' },
     { label: 'Claude 3.5 Haiku', value: 'claude-3-5-haiku-20241022' },
+    { label: 'Claude 3 Opus', value: 'claude-3-opus-20240229' },
   ],
   openai: [
     { label: 'GPT-4o', value: 'gpt-4o' },

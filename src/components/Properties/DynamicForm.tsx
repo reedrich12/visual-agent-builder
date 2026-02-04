@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useMemo } from 'react';
+import { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Node } from 'reactflow';
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
@@ -66,6 +66,11 @@ const isSectionVisibleForRole = (
 export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
   const { updateNodeData } = useStore();
 
+  // Phase 7.1: Track whether a form-initiated update is in flight
+  // This prevents the infinite loop: form change → updateNodeData → node.data.config changes → reset → form change → ...
+  const isFormUpdateRef = useRef(false);
+  const prevNodeIdRef = useRef<string>(node.id);
+
   // Initialize section expand state from schema defaults
   const [expandedSections, setExpandedSections] = useState<SectionState>(() => {
     const initial: SectionState = {};
@@ -79,9 +84,15 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
     defaultValues: node.data.config || {},
   });
 
-  // Reset form when node changes
+  // Phase 7.1 Fix: Only reset form when the NODE ITSELF changes (different node selected),
+  // NOT when node.data.config changes (which our own updateNodeData triggers).
+  // This breaks the infinite loop: reset → watch → updateNodeData → config changes → reset → ...
   useEffect(() => {
-    reset(node.data.config || {});
+    if (prevNodeIdRef.current !== node.id) {
+      prevNodeIdRef.current = node.id;
+      isFormUpdateRef.current = false;
+      reset(node.data.config || {});
+    }
   }, [node.id, reset, node.data.config]);
 
   // Watch all form values and sync to node
@@ -123,11 +134,21 @@ export const DynamicForm = ({ node, schema }: DynamicFormProps) => {
     }
   }, [currentRole, schema.type, setValue, watch]);
 
+  // Phase 7.1 Fix: Use JSON.stringify comparison to prevent re-syncing unchanged values.
+  // The formValues object from watch() is always a new reference, so we compare by content.
+  const prevFormJsonRef = useRef<string>('');
+
   useEffect(() => {
-    // Debounce updates to avoid too many rerenders
+    const json = JSON.stringify(formValues);
+    if (json === prevFormJsonRef.current) return; // No actual change
+    prevFormJsonRef.current = json;
+
+    // Mark that this update is form-initiated (prevents reset loop)
+    isFormUpdateRef.current = true;
+
     const timeout = setTimeout(() => {
       updateNodeData(node.id, { config: formValues });
-    }, 100);
+    }, 300); // Increased debounce from 100ms to 300ms for stability
     return () => clearTimeout(timeout);
   }, [formValues, node.id, updateNodeData]);
 

@@ -106,56 +106,59 @@ function inferTemperature(role?: string, label?: string): number {
 
 /**
  * Infer permissions based on the agent's role and label.
+ * Returns flat keys matching the schema field keys in schemas.ts.
  */
 function inferPermissions(role?: string, label?: string): Record<string, unknown> {
   const combined = `${role || ''} ${label || ''}`.toLowerCase();
   const isLeader = ['lead', 'director', 'supervisor', 'orchestrator'].some(k => combined.includes(k));
   return {
-    permissionMode: isLeader ? 'full' : 'default',
+    permissionMode: isLeader ? 'bypassPermissions' : 'default',
     disallowedTools: [],
     requiresApprovalFor: isLeader ? [] : ['Shell Commands'],
   };
 }
 
 /**
- * Infer guardrails based on agent purpose.
- */
-function inferGuardrails(role?: string, label?: string): Record<string, unknown> {
-  const combined = `${role || ''} ${label || ''}`.toLowerCase();
-  const isOutward = ['outreach', 'email', 'follow-up', 'script'].some(k => combined.includes(k));
-  return {
-    tokenLimit: 100000,
-    costCap: 10.00,
-    timeout: 300,
-    maxRetries: 3,
-    filterProfanity: true,
-    filterPII: isOutward,
-    promptInjectionDetection: true,
-  };
-}
-
-/**
  * Generate comprehensive defaults for an AGENT node.
- * Merges incoming config on top of intelligent defaults.
+ *
+ * CRITICAL: Field keys MUST match the schema field keys in schemas.ts exactly.
+ * The DynamicForm uses react-hook-form with these keys to read/write values.
+ *
+ * Schema uses DOT NOTATION for nested fields:
+ *   - 'guardrails.tokenLimit' (NOT flat 'tokenLimit')
+ *   - 'observability.logging.level' (NOT flat 'logLevel')
+ *   - 'memory.contextPersistence' (NOT flat 'contextPersistence')
+ *
+ * But FLAT keys for top-level fields:
+ *   - 'provider', 'model', 'temperature', 'role', 'permissionMode', etc.
  */
 function enrichAgentConfig(label: string, incoming: Record<string, unknown>): Record<string, unknown> {
   const role = (incoming.role as string) || 'specialist';
   const model = (incoming.model as string) || inferModel(role);
   const temperature = (incoming.temperature as number) ?? inferTemperature(role, label);
   const permissions = inferPermissions(role, label);
-  const guardrails = inferGuardrails(role, label);
+
+  // Infer guardrail values based on agent purpose
+  const combined = `${role} ${label}`.toLowerCase();
+  const isOutward = ['outreach', 'email', 'follow-up', 'script'].some(k => combined.includes(k));
 
   const defaults: Record<string, unknown> = {
-    // Identity
-    name: label,
+    // =========================================================================
+    // Identity section (flat keys — schema: 'label', 'description')
+    // =========================================================================
+    label: label,
     description: incoming.description || `${label} - ${role} agent`,
     teamName: '',
 
-    // Agent Role
+    // =========================================================================
+    // Agent Role section (flat keys — schema: 'roleCategory', 'role')
+    // =========================================================================
     roleCategory: inferRoleCategory(role),
     role: role,
 
-    // Model
+    // =========================================================================
+    // Model section (flat keys)
+    // =========================================================================
     provider: 'anthropic',
     model: model,
     temperature: temperature,
@@ -163,36 +166,59 @@ function enrichAgentConfig(label: string, incoming: Record<string, unknown>): Re
     contextWindow: '',
     reservedOutputTokens: '',
 
-    // Permissions
+    // =========================================================================
+    // Permissions section (flat keys)
+    // =========================================================================
     ...permissions,
 
-    // Capabilities
+    // =========================================================================
+    // Capabilities section (flat keys — arrays)
+    // =========================================================================
     skills: [],
     mcps: [],
     commands: [],
 
-    // System Prompt
+    // =========================================================================
+    // System Prompt section (flat key)
+    // =========================================================================
     systemPrompt: generateDefaultSystemPrompt(label, role),
 
-    // Advanced
+    // =========================================================================
+    // Advanced section (flat keys)
+    // =========================================================================
     maxTokens: 4096,
     topP: 0.1,
-    failoverAgents: [],
+    failoverChain: [],
 
-    // Guardrails
-    ...guardrails,
+    // =========================================================================
+    // Guardrails section (DOT-NOTATION keys matching schemas.ts)
+    // Schema fields: guardrails.tokenLimit, guardrails.costCap, etc.
+    // =========================================================================
+    'guardrails.tokenLimit': 100000,
+    'guardrails.costCap': 10.00,
+    'guardrails.timeoutSeconds': 300,
+    'guardrails.maxRetries': 3,
+    'guardrails.contentFilters.profanity': true,
+    'guardrails.contentFilters.pii': isOutward,
+    'guardrails.contentFilters.injection': true,
 
-    // Observability
-    logLevel: 'info',
-    logDestinations: 'console',
-    enableMetrics: true,
-    enableTracing: false,
+    // =========================================================================
+    // Observability section (DOT-NOTATION keys matching schemas.ts)
+    // =========================================================================
+    'observability.logging.level': 'info',
+    'observability.logging.destinations': ['console'],
+    'observability.metrics.enabled': true,
+    'observability.metrics.exportInterval': 60,
+    'observability.tracing.enabled': false,
+    'observability.tracing.samplingRate': 0.1,
 
-    // Memory & Context
-    contextPersistence: 'session',
-    memoryType: 'conversation',
-    maxContextTokens: 8000,
-    summarizationThreshold: 6000,
+    // =========================================================================
+    // Memory & Context section (DOT-NOTATION keys matching schemas.ts)
+    // =========================================================================
+    'memory.contextPersistence': 'session',
+    'memory.memoryType': 'conversation',
+    'memory.maxContextTokens': 8000,
+    'memory.summarizationThreshold': 6000,
   };
 
   // Overlay incoming values (skip empty strings)
@@ -208,12 +234,14 @@ function enrichAgentConfig(label: string, incoming: Record<string, unknown>): Re
 /**
  * Infer role category from role string.
  */
+// Phase 7.1: Values MUST match the lowercase AgentRoleCategory type in core.ts:
+// 'independent' | 'team' | 'coordinator' | 'continuous'
 function inferRoleCategory(role: string): string {
   const r = role.toLowerCase();
-  if (['solo'].includes(r)) return 'Independent';
-  if (['leader', 'orchestrator', 'router', 'director', 'supervisor'].some(k => r.includes(k))) return 'Coordinator';
-  if (['auditor', 'monitor', 'planner'].some(k => r.includes(k))) return 'Continuous';
-  return 'Team'; // specialist, member, executor, critic
+  if (['solo', 'specialist', 'planner', 'auditor', 'critic'].includes(r)) return 'independent';
+  if (['leader', 'orchestrator', 'router', 'director', 'supervisor'].some(k => r.includes(k))) return 'coordinator';
+  if (['monitor'].some(k => r.includes(k))) return 'continuous';
+  return 'team'; // member, executor, etc.
 }
 
 /**

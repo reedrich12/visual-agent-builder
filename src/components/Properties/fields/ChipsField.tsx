@@ -13,7 +13,9 @@ interface ChipsFieldProps {
 export const ChipsField = ({ field, errors, watch, setValue }: ChipsFieldProps) => {
   const [inputValue, setInputValue] = useState('');
   const error = errors[field.key];
-  const chips: string[] = watch(field.key) || [];
+  // Phase 7.1: Defensive — coerce non-array values (e.g. strings from enriched config) to arrays
+  const rawChips = watch(field.key);
+  const chips: string[] = Array.isArray(rawChips) ? rawChips : (rawChips ? [String(rawChips)] : []);
 
   const addChip = useCallback((value: string) => {
     const trimmed = value.trim();
