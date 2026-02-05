@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { Canvas } from './components/Editor/Canvas';
 import { LibraryPanel } from './components/Library/LibraryPanel';
@@ -7,6 +8,7 @@ import { StatusPanel } from './components/StatusPanel';
 import { ChatPanel } from './components/Chat';
 import { TerminalPanel } from './components/Terminal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ImportDropzone } from './features/export-import/components/ImportDropzone';
 import { fetchInventory } from './services/api';
 import { Zap, Settings } from 'lucide-react';
 import useStore from './store/useStore';
@@ -15,6 +17,11 @@ const queryClient = new QueryClient();
 
 function AppContent() {
   const { libraryCategory, setLibraryCategory, workflowConfig, setConfigModalOpen } = useStore();
+  const [showImportDropzone, setShowImportDropzone] = useState(false);
+
+  const handleImportClick = useCallback(() => {
+    setShowImportDropzone(true);
+  }, []);
 
   const { data: inventory } = useQuery({
     queryKey: ['inventory'],
@@ -83,7 +90,7 @@ function AppContent() {
         {/* Canvas Area */}
         <main className="flex-1 relative">
           <ErrorBoundary fallbackTitle="Canvas error">
-            <Canvas />
+            <Canvas onImportClick={handleImportClick} />
           </ErrorBoundary>
         </main>
 
@@ -106,6 +113,12 @@ function AppContent() {
 
       {/* Phase 6: Runtime Terminal Panel (floating bottom center) */}
       <TerminalPanel />
+
+      {/* Phase 8: Import Dropzone Overlay */}
+      <ImportDropzone
+        isActive={showImportDropzone}
+        onDeactivate={() => setShowImportDropzone(false)}
+      />
     </div>
   );
 }

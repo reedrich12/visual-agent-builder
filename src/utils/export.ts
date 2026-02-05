@@ -2,6 +2,28 @@ import { Node, Edge } from 'reactflow';
 import { Workflow, Connection, EdgeType } from '../types/core';
 
 export const generateWorkflowJson = (nodes: Node[], edges: Edge[], name: string = 'New Workflow'): Workflow => {
+  // Build hierarchy map: containerId → { childIds, childLabels, containerType }
+  const hierarchy: Record<string, { type: string; label: string; children: { id: string; type: string; label: string }[] }> = {};
+  const containerTypes = new Set(['DEPARTMENT', 'AGENT_POOL']);
+
+  for (const n of nodes) {
+    if (containerTypes.has(n.data.type)) {
+      const children = nodes
+        .filter((child) => child.parentId === n.id)
+        .map((child) => ({
+          id: child.id,
+          type: child.data.type as string,
+          label: child.data.label as string || 'Untitled',
+        }));
+
+      hierarchy[n.id] = {
+        type: n.data.type,
+        label: n.data.label || 'Untitled',
+        children,
+      };
+    }
+  }
+
   return {
     id: crypto.randomUUID(),
     name,
@@ -9,13 +31,18 @@ export const generateWorkflowJson = (nodes: Node[], edges: Edge[], name: string 
       id: n.id,
       type: n.data.type,
       position: n.position,
-      data: n.data
-    })), 
+      data: n.data,
+      // Preserve React Flow hierarchy for container nodes (Department, Agent Pool)
+      ...(n.parentId ? { parentId: n.parentId } : {}),
+      ...(n.style ? { style: { width: n.style.width as number | undefined, height: n.style.height as number | undefined } } : {}),
+      ...((n as Record<string, unknown>).extent === 'parent' ? { extent: 'parent' as const } : {}),
+      ...((n as Record<string, unknown>).expandParent === true ? { expandParent: true } : {}),
+    })),
     edges: edges.map(e => {
         // Safe casting or validation logic
         // Phase 6.3 v4: Include ALL valid edge types (was missing delegation, failover, default)
         const type = (['data', 'control', 'event', 'delegation', 'failover', 'default'].includes(e.type || '') ? e.type : undefined) as EdgeType | undefined;
-        
+
         return {
             id: e.id,
             source: e.source,
@@ -25,6 +52,15 @@ export const generateWorkflowJson = (nodes: Node[], edges: Edge[], name: string 
     }),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    // Explicit container hierarchy map for easy parsing
+    ...(Object.keys(hierarchy).length > 0 ? {
+      metadata: {
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        exportFormat: 'single-file' as const,
+      },
+      hierarchy,
+    } : {}),
   };
 };
 

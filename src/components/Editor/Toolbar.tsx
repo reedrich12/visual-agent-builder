@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { ReactFlowInstance } from 'reactflow';
 import {
   Play,
   Trash2,
@@ -7,17 +8,26 @@ import {
   FolderArchive,
   ChevronDown,
   Download,
+  Upload,
+  Save,
   Eye,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { generateClaudeConfig, generateWorkflowJson, downloadFile } from '../../utils/export';
 import { generateDirectoryExport } from '../../utils/exportDirectory';
 import { downloadAsZip, generateDirectoryTree } from '../../utils/zipGenerator';
+import { ExportDialog } from '../../features/export-import/components/ExportDialog';
 
-export const Toolbar = () => {
+interface ToolbarProps {
+  reactFlowInstance?: ReactFlowInstance | null;
+  onImportClick?: () => void;
+}
+
+export const Toolbar = ({ reactFlowInstance, onImportClick }: ToolbarProps = {}) => {
   const { nodes, edges, setNodes, setEdges, workflowConfig } = useStore();
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -165,6 +175,28 @@ export const Toolbar = () => {
 
           <div className="w-px h-7 bg-slate-200 mx-1" />
 
+          {/* Save Workflow Button */}
+          <button
+            onClick={() => setShowSaveDialog(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors active:scale-[0.98]"
+            title="Save Workflow (.agent-workflow)"
+          >
+            <Save size={14} />
+            <span>Save</span>
+          </button>
+
+          {/* Load Workflow Button */}
+          <button
+            onClick={onImportClick}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors active:scale-[0.98]"
+            title="Load Workflow (.agent-workflow)"
+          >
+            <Upload size={14} />
+            <span>Load</span>
+          </button>
+
+          <div className="w-px h-7 bg-slate-200 mx-1" />
+
           {/* Clear Button */}
           <button
             onClick={handleClear}
@@ -175,6 +207,13 @@ export const Toolbar = () => {
           </button>
         </div>
       </div>
+
+      {/* Phase 8: Save Workflow Dialog */}
+      <ExportDialog
+        isOpen={showSaveDialog}
+        onClose={() => setShowSaveDialog(false)}
+        reactFlowInstance={reactFlowInstance || null}
+      />
 
       {/* Directory Structure Preview Modal */}
       {showPreview && (

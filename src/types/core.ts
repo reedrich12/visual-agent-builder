@@ -528,6 +528,13 @@ export interface WorkflowMetadata {
   exportFormat?: 'single-file' | 'directory';
 }
 
+/** Container hierarchy entry: maps container to its children */
+export interface HierarchyEntry {
+  type: string;
+  label: string;
+  children: { id: string; type: string; label: string }[];
+}
+
 export interface Workflow {
   id: string;
   name: string;
@@ -537,6 +544,8 @@ export interface Workflow {
   createdAt: string;
   updatedAt: string;
   metadata?: WorkflowMetadata;
+  /** Explicit container-to-children hierarchy map (Department/Agent Pool → members) */
+  hierarchy?: Record<string, HierarchyEntry>;
 }
 
 // ============================================================================

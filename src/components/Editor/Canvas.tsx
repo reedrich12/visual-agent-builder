@@ -1,9 +1,10 @@
-import { useCallback, useRef, DragEvent, useState } from 'react';
+import { useCallback, useRef, DragEvent, useState, forwardRef, useImperativeHandle } from 'react';
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   ReactFlowProvider,
+  ReactFlowInstance,
   Node,
   Edge,
   ConnectionMode,
@@ -73,9 +74,23 @@ const getId = () => `dndnode_${id++}`;
 let edgeId = 0;
 const getEdgeId = () => `edge_${edgeId++}`;
 
-const CanvasContent = () => {
+// Expose reactFlowInstance to parent via ref
+export interface CanvasHandle {
+  getReactFlowInstance: () => ReactFlowInstance | null;
+}
+
+interface CanvasContentProps {
+  onImportClick?: () => void;
+}
+
+const CanvasContent = forwardRef<CanvasHandle, CanvasContentProps>(({ onImportClick }, ref) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+
+  // Expose reactFlowInstance to parent
+  useImperativeHandle(ref, () => ({
+    getReactFlowInstance: () => reactFlowInstance,
+  }), [reactFlowInstance]);
 
   // State for edge type selector popup
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
@@ -303,7 +318,7 @@ const CanvasContent = () => {
         }}
       />
 
-      <Toolbar />
+      <Toolbar reactFlowInstance={reactFlowInstance} onImportClick={onImportClick} />
       <ReactFlow
         nodes={nodes}
         edges={visibleEdges}
@@ -361,10 +376,18 @@ const CanvasContent = () => {
       )}
     </div>
   );
-};
+});
 
-export const Canvas = () => (
+CanvasContent.displayName = 'CanvasContent';
+
+interface CanvasProps {
+  onImportClick?: () => void;
+}
+
+export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ onImportClick }, ref) => (
   <ReactFlowProvider>
-    <CanvasContent />
+    <CanvasContent ref={ref} onImportClick={onImportClick} />
   </ReactFlowProvider>
-);
+));
+
+Canvas.displayName = 'Canvas';
