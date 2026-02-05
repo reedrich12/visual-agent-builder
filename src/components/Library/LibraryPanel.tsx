@@ -29,6 +29,8 @@ import {
   Package,
   GripVertical,
   Search,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { NodeType } from '../../types/core';
 import { BundleCard } from './BundleCard';
@@ -270,6 +272,8 @@ export const LibraryPanel = () => {
     resetLibraryFilters,
     libraryViewMode,
     setLibraryViewMode,
+    isLibraryPanelCollapsed,
+    toggleLibraryPanel,
   } = useStore();
 
   // Search state
@@ -573,8 +577,34 @@ export const LibraryPanel = () => {
     );
   };
 
+  // Collapsed state - show minimal sidebar with expand button
+  if (isLibraryPanelCollapsed) {
+    return (
+      <aside className="w-12 bg-white border-r border-slate-200 flex flex-col items-center py-4 h-full z-10 shrink-0 transition-all duration-200">
+        <button
+          onClick={toggleLibraryPanel}
+          className="p-2.5 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors group"
+          title="Expand Library Panel"
+        >
+          <PanelLeftOpen size={18} />
+        </button>
+        <div className="mt-4 flex flex-col items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center" title="Agents">
+            <Bot size={14} className="text-blue-500" />
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center" title="Skills">
+            <Sparkles size={14} className="text-green-500" />
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center" title="Departments">
+            <Building2 size={14} className="text-orange-500" />
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
   if (isLoading) return (
-    <aside className="w-72 bg-white border-r border-slate-200 flex items-center justify-center h-full">
+    <aside className="w-72 bg-white border-r border-slate-200 flex items-center justify-center h-full shrink-0 transition-all duration-200">
       <div className="flex flex-col items-center gap-3 text-slate-400">
         <Loader2 className="animate-spin w-6 h-6" />
         <span className="text-sm">Loading Library...</span>
@@ -583,7 +613,7 @@ export const LibraryPanel = () => {
   );
 
   if (error) return (
-    <aside className="w-72 bg-white border-r border-slate-200 p-4">
+    <aside className="w-72 bg-white border-r border-slate-200 p-4 shrink-0 transition-all duration-200">
       <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg border border-red-200">
         Failed to load inventory. Is the server running?
       </div>
@@ -640,7 +670,16 @@ export const LibraryPanel = () => {
   );
 
   return (
-    <aside className="w-72 bg-white border-r border-slate-200 flex flex-col h-full z-10 shrink-0">
+    <aside className="relative w-72 bg-white border-r border-slate-200 flex flex-col h-full z-10 shrink-0 transition-all duration-200">
+      {/* Collapse Toggle */}
+      <button
+        onClick={toggleLibraryPanel}
+        className="absolute top-1/2 -translate-y-1/2 -right-3 z-20 p-1.5 bg-white border border-slate-200 rounded-full shadow-sm hover:bg-slate-50 hover:border-slate-300 text-slate-400 hover:text-slate-600 transition-all"
+        title="Collapse Library Panel"
+      >
+        <PanelLeftClose size={14} />
+      </button>
+
       {/* Header */}
       <div className="p-4 border-b border-slate-100">
         {showAddModeHeader ? (

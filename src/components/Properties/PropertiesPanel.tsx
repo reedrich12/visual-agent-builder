@@ -21,6 +21,8 @@ import {
   ArrowRight,
   Layers,
   MousePointerClick,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 import { NodeType, NODE_TYPE_INFO, isContainerType } from '../../types/core';
 import { getSchemaForType } from './schemas';
@@ -226,7 +228,7 @@ const ContainerMembersSection = ({ childNodes, connectedNodes, onSelectNode }: C
 };
 
 export const PropertiesPanel = () => {
-  const { selectedNode, setSelectedNode, selectedEdge, setSelectedEdge, updateEdgeType, nodes, edges } = useStore();
+  const { selectedNode, setSelectedNode, selectedEdge, setSelectedEdge, updateEdgeType, nodes, edges, isPropertiesPanelCollapsed, togglePropertiesPanel } = useStore();
   const { socket } = useSocket();
   const [isClosing, setIsClosing] = useState(false);
 
@@ -275,6 +277,38 @@ export const PropertiesPanel = () => {
     console.log('[PropertiesPanel] Edge type changed:', selectedEdge.id, '->', newType);
   }, [selectedEdge, updateEdgeType, socket]);
 
+  // Collapsed state - show minimal sidebar with expand button
+  if (isPropertiesPanelCollapsed) {
+    return (
+      <aside className="w-12 bg-white border-l border-slate-200 flex flex-col items-center py-4 h-full z-10 shrink-0 transition-all duration-200">
+        <button
+          onClick={togglePropertiesPanel}
+          className="p-2.5 rounded-xl bg-slate-100 hover:bg-indigo-100 text-slate-500 hover:text-indigo-600 transition-colors group"
+          title="Expand Properties Panel"
+        >
+          <PanelRightOpen size={18} />
+        </button>
+        {selectedNode && (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg ${nodeTypeColors[nodeType!]?.bg || 'bg-slate-50'} flex items-center justify-center`} title={selectedNode.data.label || 'Selected'}>
+              {(() => {
+                const Icon = nodeTypeIcons[nodeType!] || Bot;
+                return <Icon size={14} className={nodeTypeColors[nodeType!]?.text || 'text-slate-500'} />;
+              })()}
+            </div>
+          </div>
+        )}
+        {selectedEdge && (
+          <div className="mt-4">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center" title="Edge selected">
+              <Network size={14} className="text-blue-500" />
+            </div>
+          </div>
+        )}
+      </aside>
+    );
+  }
+
   // Phase 6.3: Render Edge Inspector Panel
   if (selectedEdge) {
     const currentType = (selectedEdge.data as any)?.type || 'default';
@@ -286,12 +320,21 @@ export const PropertiesPanel = () => {
     return (
       <aside
         className={`
-          w-80 bg-white border-l border-slate-200
+          relative w-80 bg-white border-l border-slate-200
           z-10 flex flex-col shrink-0 h-full
-          transition-all duration-150
+          transition-all duration-200
           ${isClosing ? 'opacity-0 translate-x-4' : 'opacity-100 translate-x-0'}
         `}
       >
+        {/* Collapse Toggle */}
+        <button
+          onClick={togglePropertiesPanel}
+          className="absolute top-1/2 -translate-y-1/2 -left-3 z-20 p-1.5 bg-white border border-slate-200 rounded-full shadow-sm hover:bg-slate-50 hover:border-slate-300 text-slate-400 hover:text-slate-600 transition-all"
+          title="Collapse Properties Panel"
+        >
+          <PanelRightClose size={14} />
+        </button>
+
         {/* Header */}
         <div className="px-4 py-4 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center justify-between">
@@ -377,7 +420,16 @@ export const PropertiesPanel = () => {
   // Empty state - no node or edge selected
   if (!selectedNode) {
     return (
-      <aside className="w-80 bg-white border-l border-slate-200 z-10 hidden lg:flex flex-col shrink-0 h-full">
+      <aside className="relative w-80 bg-white border-l border-slate-200 z-10 hidden lg:flex flex-col shrink-0 h-full transition-all duration-200">
+        {/* Collapse Toggle */}
+        <button
+          onClick={togglePropertiesPanel}
+          className="absolute top-1/2 -translate-y-1/2 -left-3 z-20 p-1.5 bg-white border border-slate-200 rounded-full shadow-sm hover:bg-slate-50 hover:border-slate-300 text-slate-400 hover:text-slate-600 transition-all"
+          title="Collapse Properties Panel"
+        >
+          <PanelRightClose size={14} />
+        </button>
+
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-slate-100">
@@ -413,12 +465,21 @@ export const PropertiesPanel = () => {
   return (
     <aside
       className={`
-        w-80 bg-white border-l border-slate-200
+        relative w-80 bg-white border-l border-slate-200
         z-10 flex flex-col shrink-0 h-full
-        transition-all duration-150
+        transition-all duration-200
         ${isClosing ? 'opacity-0 translate-x-4' : 'opacity-100 translate-x-0'}
       `}
     >
+      {/* Collapse Toggle */}
+      <button
+        onClick={togglePropertiesPanel}
+        className="absolute top-1/2 -translate-y-1/2 -left-3 z-20 p-1.5 bg-white border border-slate-200 rounded-full shadow-sm hover:bg-slate-50 hover:border-slate-300 text-slate-400 hover:text-slate-600 transition-all"
+        title="Collapse Properties Panel"
+      >
+        <PanelRightClose size={14} />
+      </button>
+
       {/* Header */}
       <div className="px-4 py-4 border-b border-slate-100">
         <div className="flex items-center justify-between">

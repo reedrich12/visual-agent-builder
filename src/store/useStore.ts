@@ -55,6 +55,9 @@ interface StoreState {
   isConfigModalOpen: boolean;
   libraryFilters: LibraryFilters;
   libraryViewMode: LibraryViewMode;
+  // Panel collapse state
+  isLibraryPanelCollapsed: boolean;
+  isPropertiesPanelCollapsed: boolean;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -75,6 +78,11 @@ interface StoreState {
   resetLibraryFilters: () => void;
   // View mode
   setLibraryViewMode: (mode: LibraryViewMode) => void;
+  // Panel collapse
+  setLibraryPanelCollapsed: (collapsed: boolean) => void;
+  setPropertiesPanelCollapsed: (collapsed: boolean) => void;
+  toggleLibraryPanel: () => void;
+  togglePropertiesPanel: () => void;
   // Hierarchy helpers
   addChildNode: (parentId: string, node: Node) => void;
   moveNodeToParent: (nodeId: string, parentId: string | null) => void;
@@ -94,6 +102,8 @@ const useStore = create<StoreState>((set, get) => ({
   isConfigModalOpen: false,
   libraryFilters: DEFAULT_LIBRARY_FILTERS,
   libraryViewMode: 'type' as LibraryViewMode,
+  isLibraryPanelCollapsed: false,
+  isPropertiesPanelCollapsed: false,
 
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -209,6 +219,12 @@ const useStore = create<StoreState>((set, get) => ({
       },
     });
   },
+
+  // Panel collapse actions
+  setLibraryPanelCollapsed: (collapsed) => set({ isLibraryPanelCollapsed: collapsed }),
+  setPropertiesPanelCollapsed: (collapsed) => set({ isPropertiesPanelCollapsed: collapsed }),
+  toggleLibraryPanel: () => set({ isLibraryPanelCollapsed: !get().isLibraryPanelCollapsed }),
+  togglePropertiesPanel: () => set({ isPropertiesPanelCollapsed: !get().isPropertiesPanelCollapsed }),
 
   // Hierarchy helpers for container nodes (Department, Agent Pool)
   addChildNode: (parentId, node) => {
