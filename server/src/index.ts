@@ -1,8 +1,10 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+dotenv.config({ path: path.resolve(__dirname, '../.env'), override: true });
+
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
-import path from 'path';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import {

@@ -96,6 +96,43 @@ export interface ExecutionLogPayload {
   timestamp: number;
 }
 
+export interface AgentResultPayload {
+  sessionId: string;
+  phaseIndex: number;
+  phaseName: string;
+  agentId: string;
+  agentLabel: string;
+  status: 'success' | 'error' | 'timeout';
+  output: string;
+  tokensUsed: { input: number; output: number };
+  durationMs: number;
+  cost: number;
+}
+
+export interface ExecutionReportPayload {
+  sessionId: string;
+  workflow: string;
+  startedAt: string;
+  completedAt: string;
+  totalDurationMs: number;
+  totalCost: number;
+  totalTokens: { input: number; output: number };
+  phases: Array<{
+    name: string;
+    results: Array<{
+      agentId: string;
+      agentLabel: string;
+      status: 'success' | 'error' | 'timeout';
+      output: string;
+      tokensUsed: { input: number; output: number };
+      durationMs: number;
+      cost: number;
+    }>;
+    durationMs: number;
+  }>;
+  status: 'success' | 'partial' | 'failed';
+}
+
 // -----------------------------------------------------------------------------
 // Server to Client Events
 // -----------------------------------------------------------------------------
@@ -117,6 +154,8 @@ export interface ServerToClientEvents {
   'execution:stepComplete': (payload: ExecutionStepResultPayload) => void;
   'execution:planComplete': (payload: { sessionId: string; planId: string; success: boolean }) => void;
   'execution:log': (payload: ExecutionLogPayload) => void;
+  'execution:agentResult': (payload: AgentResultPayload) => void;
+  'execution:report': (payload: ExecutionReportPayload) => void;
 
   // Error events
   'error': (payload: { code: string; message: string; details?: unknown }) => void;
@@ -140,7 +179,7 @@ export interface ClientToServerEvents {
   'canvas:sync': (payload: { nodes: unknown[]; edges: unknown[] }) => void;
 
   // Phase 6: Runtime control
-  'system:start': (payload: { sessionId: string; nodes: unknown[]; edges: unknown[] }) => void;
+  'system:start': (payload: { sessionId: string; nodes: unknown[]; edges: unknown[]; brief: string }) => void;
   'system:stop': (payload: { sessionId: string }) => void;
 }
 

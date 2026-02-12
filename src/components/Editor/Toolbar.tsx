@@ -11,10 +11,12 @@ import {
   Upload,
   Save,
   Eye,
+  BookOpen,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
-import { generateClaudeConfig, generateWorkflowJson, downloadFile } from '../../utils/export';
+import { generateWorkflowJson, downloadFile } from '../../utils/export';
 import { generateDirectoryExport } from '../../utils/exportDirectory';
+import { generateClaudeMdExecutable } from '../../utils/generateClaudeMdExecutable';
 import { downloadAsZip, generateDirectoryTree } from '../../utils/zipGenerator';
 import { ExportDialog } from '../../features/export-import/components/ExportDialog';
 
@@ -56,16 +58,23 @@ export const Toolbar = ({ reactFlowInstance, onImportClick }: ToolbarProps = {})
   };
 
   const handleExportMd = () => {
-    const md = generateClaudeConfig(nodes, edges);
+    const md = generateClaudeMdExecutable(nodes, edges, workflowConfig.name);
     downloadFile(md, 'CLAUDE.md', 'text/markdown');
     setShowExportMenu(false);
   };
 
-  const handleExportZip = async () => {
-    const files = generateDirectoryExport(nodes, edges, workflowConfig.name);
-    const filename = workflowConfig.name.toLowerCase().replace(/\s+/g, '-') + '-export.zip';
+  const handleExportZipWithFormat = async (format: 'executable' | 'documentary') => {
+    const files = generateDirectoryExport(nodes, edges, workflowConfig.name, {
+      claudeMdFormat: format,
+    });
+    const suffix = format === 'executable' ? '-run' : '-docs';
+    const filename = workflowConfig.name.toLowerCase().replace(/\s+/g, '-') + suffix + '.zip';
     await downloadAsZip(files, filename);
     setShowExportMenu(false);
+  };
+
+  const handleExportZip = async () => {
+    await handleExportZipWithFormat('executable');
   };
 
   const handlePreviewStructure = () => {
@@ -73,9 +82,16 @@ export const Toolbar = ({ reactFlowInstance, onImportClick }: ToolbarProps = {})
     setShowExportMenu(false);
   };
 
-  const handleRun = () => {
-    alert('Workflow execution started! Check console for output.');
-    console.log('Executing Workflow:', generateWorkflowJson(nodes, edges));
+  const handleRun = async () => {
+    if (nodes.length === 0) {
+      alert('Add some nodes to the canvas before running.');
+      return;
+    }
+    const files = generateDirectoryExport(nodes, edges, workflowConfig.name, {
+      claudeMdFormat: 'executable',
+    });
+    const filename = workflowConfig.name.toLowerCase().replace(/\s+/g, '-') + '-run.zip';
+    await downloadAsZip(files, filename);
   };
 
   // Generate preview content
@@ -145,18 +161,34 @@ export const Toolbar = ({ reactFlowInstance, onImportClick }: ToolbarProps = {})
                   </div>
                 </button>
                 <div className="border-t border-slate-100 my-1" />
+                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Directory Export
+                </div>
                 <button
-                  onClick={handleExportZip}
+                  onClick={() => handleExportZipWithFormat('executable')}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="p-1.5 bg-emerald-50 rounded-lg">
+                    <Play size={14} className="text-emerald-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium">Export Executable</p>
+                    <p className="text-xs text-slate-400">Step-by-step protocol ZIP</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleExportZipWithFormat('documentary')}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <div className="p-1.5 bg-purple-50 rounded-lg">
-                    <FolderArchive size={14} className="text-purple-600" />
+                    <BookOpen size={14} className="text-purple-600" />
                   </div>
                   <div className="text-left">
-                    <p className="font-medium">Export Directory</p>
-                    <p className="text-xs text-slate-400">Full project as ZIP</p>
+                    <p className="font-medium">Export Documentary</p>
+                    <p className="text-xs text-slate-400">Architecture overview ZIP</p>
                   </div>
                 </button>
+                <div className="border-t border-slate-100 my-1" />
                 <button
                   onClick={handlePreviewStructure}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-500 hover:bg-slate-50 transition-colors"

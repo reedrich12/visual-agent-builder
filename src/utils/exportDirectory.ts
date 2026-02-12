@@ -1,6 +1,5 @@
 import { Node, Edge } from 'reactflow';
 import {
-  NodeType,
   DepartmentConfig,
   AgentPoolConfig,
   AgentConfig,
@@ -10,16 +9,14 @@ import {
   CommandConfig,
   DirectoryExport,
 } from '../types/core';
+import { getChildNodes, getNodesByType, slugify } from './exportHelpers';
+import { generateClaudeMdExecutable } from './generateClaudeMdExecutable';
 
-// Helper to get child nodes for a parent
-const getChildNodes = (parentId: string, nodes: Node[]): Node[] => {
-  return nodes.filter(n => n.parentId === parentId);
-};
-
-// Helper to get nodes by type
-const getNodesByType = (nodes: Node[], type: NodeType): Node[] => {
-  return nodes.filter(n => n.data.type === type);
-};
+// Options for directory export
+export interface DirectoryExportOptions {
+  /** 'executable' produces a step-by-step protocol; 'documentary' produces an architecture overview */
+  claudeMdFormat?: 'executable' | 'documentary';
+}
 
 // Generate MCP server JSON config
 const generateMcpServerEntry = (node: Node): Record<string, any> => {
@@ -584,9 +581,18 @@ export const generateClaudeMd = (nodes: Node[], edges: Edge[], name: string = 'A
 };
 
 // Main function to generate directory export structure
-export const generateDirectoryExport = (nodes: Node[], edges: Edge[], name: string = 'AI-OS Workflow'): DirectoryExport => {
+export const generateDirectoryExport = (
+  nodes: Node[],
+  edges: Edge[],
+  name: string = 'AI-OS Workflow',
+  options: DirectoryExportOptions = {}
+): DirectoryExport => {
+  const { claudeMdFormat = 'executable' } = options;
+
   const files: DirectoryExport = {
-    'CLAUDE.md': generateClaudeMd(nodes, edges, name),
+    'CLAUDE.md': claudeMdFormat === 'executable'
+      ? generateClaudeMdExecutable(nodes, edges, name)
+      : generateClaudeMd(nodes, edges, name),
   };
 
   // Generate .claude/mcp.json if MCP servers exist
@@ -617,18 +623,18 @@ export const generateDirectoryExport = (nodes: Node[], edges: Edge[], name: stri
     const pool = pools.find(p => agent.parentId === p.id);
     const department = pool ? departments.find(d => pool.parentId === d.id) : undefined;
 
-    // Build path
+    // Build path (using slugify for consistency with executable CLAUDE.md references)
     let path = 'agents/';
     if (department) {
       const deptConfig = department.data.config as DepartmentConfig;
-      path += `${(deptConfig.name || department.data.label).toLowerCase().replace(/\s+/g, '-')}/`;
+      path += `${slugify(deptConfig.name || department.data.label)}/`;
     }
     if (pool) {
       const poolConfig = pool.data.config as AgentPoolConfig;
-      path += `${(poolConfig.name || pool.data.label).toLowerCase().replace(/\s+/g, '-')}/`;
+      path += `${slugify(poolConfig.name || pool.data.label)}/`;
     }
     const agentConfig = agent.data.config as AgentConfig;
-    path += `${(agentConfig.name || agent.data.label).toLowerCase().replace(/\s+/g, '-')}.md`;
+    path += `${slugify(agentConfig.name || agent.data.label)}.md`;
 
     files[path] = generateAgentMarkdown(agent, pool, department);
   });
@@ -637,7 +643,7 @@ export const generateDirectoryExport = (nodes: Node[], edges: Edge[], name: stri
   const skills = getNodesByType(nodes, 'SKILL');
   skills.forEach(skill => {
     const config = skill.data.config as SkillConfig;
-    const skillName = (config.name || skill.data.label).toLowerCase().replace(/\s+/g, '-');
+    const skillName = slugify(config.name || skill.data.label);
     files[`skills/${skillName}/SKILL.md`] = generateSkillMarkdown(skill);
   });
 
@@ -645,7 +651,7 @@ export const generateDirectoryExport = (nodes: Node[], edges: Edge[], name: stri
   const commands = getNodesByType(nodes, 'COMMAND');
   commands.forEach(command => {
     const config = command.data.config as CommandConfig;
-    const commandName = (config.name || command.data.label).toLowerCase().replace(/\s+/g, '-');
+    const commandName = slugify(config.name || command.data.label);
     files[`commands/${commandName}.md`] = generateCommandMarkdown(command);
   });
 

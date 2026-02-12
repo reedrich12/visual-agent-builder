@@ -9,7 +9,9 @@ import { SessionMessage } from '../../shared/socket-events';
 import { Session } from '../types/session';
 import { createSupervisorAgent, SupervisorAgent } from '../agents/supervisor';
 import { canvas_sync_from_client, canvasState, persistLayout } from '../mcp/canvas-mcp';
-import { simulateSystemStart } from '../services/runtime';
+import { validateSystem } from '../services/runtime';
+import { executeWorkflow, stopExecution } from '../services/orchestrator-bridge';
+import { emitExecutionLog } from './emitter';
 
 // In-memory session store (will be replaced with proper store later)
 const sessions = new Map<string, Session>();
@@ -225,9 +227,9 @@ export function setupSocketHandlers(io: TypedSocketServer): void {
       }
     });
 
-    // Phase 6: Handle system start (runtime simulation)
+    // Phase 6 → Phase 7: Handle system start (real orchestrator execution)
     socket.on('system:start' as any, async (payload: any) => {
-      const { sessionId, nodes, edges } = payload;
+      const { sessionId, nodes, edges, brief } = payload;
 
       if (!sessionId) {
         socket.emit('error', {
@@ -239,25 +241,55 @@ export function setupSocketHandlers(io: TypedSocketServer): void {
 
       console.log(`[Socket] System start requested for session: ${sessionId}`);
 
-      // Map node data for runtime
-      const nodeInfos = (nodes as any[]).map((n) => ({
+      // Map node data for validation
+      const nodeInfos = (nodes as any[]).map((n: any) => ({
         id: n.id,
         type: n.data?.type || n.type || 'UNKNOWN',
         label: n.data?.label || n.id,
       }));
 
-      // Map edge data for runtime
-      const edgeInfos = (edges as any[]).map((e) => ({
+      const edgeInfos = (edges as any[]).map((e: any) => ({
         id: e.id,
         sourceId: e.source,
         targetId: e.target,
         edgeType: e.type || e.data?.edgeType || e.data?.type,
       }));
 
+      // Step 1: Pre-flight validation (kept from runtime.ts)
+      emitExecutionLog(sessionId, '[PRE-FLIGHT] Validating workflow graph...');
+      const validation = validateSystem(nodeInfos, edgeInfos);
+
+      if (validation.errors.length > 0) {
+        validation.errors.forEach((err) =>
+          emitExecutionLog(sessionId, `ERROR: ${err}`, 'stderr')
+        );
+        emitExecutionLog(sessionId, '');
+        emitExecutionLog(
+          sessionId,
+          'Validation failed. Fix errors before running.',
+          'stderr'
+        );
+        return;
+      }
+
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach((warn) =>
+          emitExecutionLog(sessionId, `WARN: ${warn}`)
+        );
+      }
+      emitExecutionLog(
+        sessionId,
+        `Validation passed: ${nodeInfos.length} nodes, ${edgeInfos.length} edges`
+      );
+      emitExecutionLog(sessionId, '');
+
+      // Step 2: Execute via real orchestrator engine
       try {
-        await simulateSystemStart(sessionId, nodeInfos, edgeInfos);
+        await executeWorkflow(sessionId, nodes as any[], edges as any[], brief);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        emitExecutionLog(sessionId, `Runtime error: ${errorMessage}`, 'stderr');
         socket.emit('error', {
           code: 'RUNTIME_ERROR',
           message: `Runtime error: ${errorMessage}`,
@@ -265,11 +297,11 @@ export function setupSocketHandlers(io: TypedSocketServer): void {
       }
     });
 
-    // Phase 6: Handle system stop
+    // Phase 6 → Phase 7: Handle system stop (cancels real execution)
     socket.on('system:stop' as any, (payload: any) => {
       const { sessionId } = payload;
-      console.log(`[Socket] System stopped for session: ${sessionId}`);
-      // Future: implement actual process termination
+      console.log(`[Socket] System stop requested for session: ${sessionId}`);
+      stopExecution(sessionId);
     });
 
     // Phase 6.3: Handle edge type update from Properties Panel

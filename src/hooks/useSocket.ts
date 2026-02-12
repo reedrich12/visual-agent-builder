@@ -13,6 +13,8 @@ import {
   CanvasNodePayload,
   CanvasNodeUpdatePayload,
   CanvasEdgePayload,
+  AgentResultPayload,
+  ExecutionReportPayload,
 } from '../../shared/socket-events';
 
 const SOCKET_URL = 'http://localhost:3001';
@@ -29,6 +31,8 @@ export interface UseSocketOptions {
   onSessionMessage?: (message: SessionMessage) => void;
   onExecutionStepStart?: (stepName: string, stepOrder: number, totalSteps: number) => void;
   onExecutionStepComplete?: (stepName: string, success: boolean, error?: string) => void;
+  onAgentResult?: (payload: AgentResultPayload) => void;
+  onExecutionReport?: (payload: ExecutionReportPayload) => void;
   onError?: (code: string, message: string) => void;
 }
 
@@ -124,6 +128,14 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
         payload.success,
         payload.error
       );
+    });
+
+    socket.on('execution:agentResult', (payload) => {
+      optionsRef.current.onAgentResult?.(payload);
+    });
+
+    socket.on('execution:report', (payload) => {
+      optionsRef.current.onExecutionReport?.(payload);
     });
 
     // Error events

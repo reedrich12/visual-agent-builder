@@ -17,6 +17,8 @@ import {
   ExecutionStepPayload,
   ExecutionStepResultPayload,
   ExecutionLogPayload,
+  AgentResultPayload,
+  ExecutionReportPayload,
 } from '../../shared/socket-events';
 
 // Type-safe Socket.io server
@@ -121,6 +123,14 @@ export function emitExecutionLog(
     stream,
     timestamp: Date.now(),
   });
+}
+
+export function emitAgentResult(payload: AgentResultPayload): void {
+  getSocketServer().emit('execution:agentResult', payload);
+}
+
+export function emitExecutionReport(payload: ExecutionReportPayload): void {
+  getSocketServer().emit('execution:report', payload);
 }
 
 // -----------------------------------------------------------------------------

@@ -1,43 +1,137 @@
 // =============================================================================
 // Terminal Panel Component
-// Phase 6: Displays streaming execution logs from the runtime system
+// Phase 7+: Displays streaming execution logs with progress, agent outputs,
+// and post-execution results panel
 // =============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Terminal, Play, Square, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Terminal,
+  Play,
+  Square,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  BarChart3,
+} from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
 import useStore from '../../store/useStore';
+import { AgentOutputBlock } from './AgentOutputBlock';
+import { TerminalProgressBar } from './TerminalProgressBar';
+import { ExecutionResultsPanel } from './ExecutionResultsPanel';
+import { ExecutionPromptModal } from './ExecutionPromptModal';
+import type {
+  AgentResultPayload,
+  ExecutionReportPayload,
+} from '../../../shared/socket-events';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface LogEntry {
   id: string;
   timestamp: number;
   output: string;
   stream: 'stdout' | 'stderr';
+  type: 'text' | 'phase-start' | 'agent-result';
+  phaseInfo?: { index: number; total: number; name: string };
+  agentResult?: AgentResultPayload;
 }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export const TerminalPanel: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [executionReport, setExecutionReport] = useState<ExecutionReportPayload | null>(null);
+
+  // Phase progress state
+  const [currentPhase, setCurrentPhase] = useState(0);
+  const [totalPhases, setTotalPhases] = useState(0);
+  const [currentPhaseName, setCurrentPhaseName] = useState('');
+
+  // Resizable height state
+  const [contentHeight, setContentHeight] = useState(256); // default h-64 = 256px
+  const isDraggingRef = useRef(false);
+  const dragStartYRef = useRef(0);
+  const dragStartHeightRef = useRef(0);
+
   const logsEndRef = useRef<HTMLDivElement>(null);
   const { nodes, edges } = useStore();
 
-  // Socket connection
-  const { isConnected, sessionId, socket } = useSocket();
+  // Socket connection with all event callbacks
+  const { isConnected, sessionId, socket, startSession } = useSocket({
+    onExecutionStepStart: (stepName, stepOrder, totalSteps) => {
+      setCurrentPhase(stepOrder);
+      setTotalPhases(totalSteps);
+      setCurrentPhaseName(stepName);
 
-  // Listen for execution logs
+      // Add phase separator to logs
+      const entry: LogEntry = {
+        id: `phase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        output: '',
+        stream: 'stdout',
+        type: 'phase-start',
+        phaseInfo: { index: stepOrder, total: totalSteps, name: stepName },
+      };
+      setLogs((prev) => [...prev, entry]);
+    },
+    onAgentResult: (payload: AgentResultPayload) => {
+      const entry: LogEntry = {
+        id: `result_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        output: '',
+        stream: 'stdout',
+        type: 'agent-result',
+        agentResult: payload,
+      };
+      setLogs((prev) => [...prev, entry]);
+    },
+    onExecutionReport: (payload: ExecutionReportPayload) => {
+      setExecutionReport(payload);
+      setIsRunning(false);
+      setCurrentPhase(0);
+      setTotalPhases(0);
+      setCurrentPhaseName('');
+    },
+  });
+
+  // Listen for plain text execution logs
   useEffect(() => {
     if (!socket) return;
 
-    const handleExecutionLog = (payload: { output: string; stream?: 'stdout' | 'stderr'; timestamp?: number }) => {
+    const handleExecutionLog = (payload: {
+      output: string;
+      stream?: 'stdout' | 'stderr';
+      timestamp?: number;
+    }) => {
       const entry: LogEntry = {
         id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         timestamp: payload.timestamp || Date.now(),
         output: payload.output,
         stream: payload.stream || 'stdout',
+        type: 'text',
       };
-      setLogs(prev => [...prev, entry]);
-      setIsExpanded(true); // Auto-open on activity
+      setLogs((prev) => [...prev, entry]);
+      setIsExpanded(true);
+
+      // Detect execution completion or cancellation (fallback if report event doesn't fire)
+      if (
+        payload.output.includes('completed successfully') ||
+        payload.output.includes('completed with warnings') ||
+        payload.output.includes('FAILED') ||
+        payload.output.includes('Execution cancelled') ||
+        payload.output.includes('Validation failed')
+      ) {
+        setIsRunning(false);
+      }
     };
 
     socket.on('execution:log', handleExecutionLog);
@@ -48,13 +142,25 @@ export const TerminalPanel: React.FC = () => {
 
   // Auto-scroll to bottom on new logs
   useEffect(() => {
-    if (isExpanded && logsEndRef.current) {
+    if (isExpanded && !showResults && logsEndRef.current) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [logs, isExpanded]);
+  }, [logs, isExpanded, showResults]);
 
+  // Open prompt modal when Run is clicked
   const handleRun = useCallback(() => {
-    if (!isConnected || !socket || !sessionId) {
+    if (!isConnected || !socket) {
+      console.warn('[Terminal] Cannot run: not connected');
+      return;
+    }
+    setShowPromptModal(true);
+  }, [isConnected, socket]);
+
+  // Execute workflow with user-provided brief
+  const handleExecuteWithBrief = useCallback(async (brief: string) => {
+    setShowPromptModal(false);
+
+    if (!isConnected || !socket) {
       console.warn('[Terminal] Cannot run: not connected');
       return;
     }
@@ -62,16 +168,33 @@ export const TerminalPanel: React.FC = () => {
     setIsRunning(true);
     setLogs([]);
     setIsExpanded(true);
+    setShowResults(false);
+    setExecutionReport(null);
+    setCurrentPhase(0);
+    setTotalPhases(0);
+    setCurrentPhaseName('');
 
-    // Emit system:start event with current canvas state
+    let activeSessionId = sessionId;
+    if (!activeSessionId) {
+      try {
+        activeSessionId = await startSession();
+      } catch (err) {
+        console.error('[Terminal] Failed to start session:', err);
+        setIsRunning(false);
+        return;
+      }
+    }
+
     socket.emit('system:start', {
-      sessionId,
-      nodes: nodes.map(n => ({
+      sessionId: activeSessionId,
+      brief,
+      nodes: nodes.map((n) => ({
         id: n.id,
         data: n.data,
         type: n.type,
+        parentId: n.parentId,
       })),
-      edges: edges.map(e => ({
+      edges: edges.map((e) => ({
         id: e.id,
         source: e.source,
         target: e.target,
@@ -79,7 +202,7 @@ export const TerminalPanel: React.FC = () => {
         data: e.data,
       })),
     });
-  }, [isConnected, socket, sessionId, nodes, edges]);
+  }, [isConnected, socket, sessionId, startSession, nodes, edges]);
 
   const handleStop = useCallback(() => {
     setIsRunning(false);
@@ -90,6 +213,8 @@ export const TerminalPanel: React.FC = () => {
 
   const handleClear = useCallback(() => {
     setLogs([]);
+    setExecutionReport(null);
+    setShowResults(false);
   }, []);
 
   const formatTimestamp = (ts: number) => {
@@ -102,7 +227,44 @@ export const TerminalPanel: React.FC = () => {
     });
   };
 
+  // Drag-to-resize handler
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      isDraggingRef.current = true;
+      dragStartYRef.current = e.clientY;
+      dragStartHeightRef.current = contentHeight;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+
+      const handleDragMove = (moveEvent: MouseEvent) => {
+        if (!isDraggingRef.current) return;
+        // Dragging up (negative deltaY) = increase height
+        const deltaY = dragStartYRef.current - moveEvent.clientY;
+        const newHeight = Math.min(
+          Math.max(dragStartHeightRef.current + deltaY, 128),
+          600
+        );
+        setContentHeight(newHeight);
+      };
+
+      const handleDragEnd = () => {
+        isDraggingRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', handleDragMove);
+        document.removeEventListener('mouseup', handleDragEnd);
+      };
+
+      document.addEventListener('mousemove', handleDragMove);
+      document.addEventListener('mouseup', handleDragEnd);
+    },
+    [contentHeight]
+  );
+
+  // -------------------------------------------------------------------------
   // Collapsed bar at bottom
+  // -------------------------------------------------------------------------
   if (!isExpanded) {
     return (
       <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-40">
@@ -120,19 +282,35 @@ export const TerminalPanel: React.FC = () => {
               {logs.length}
             </span>
           )}
+          {isRunning && (
+            <span className="ml-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          )}
         </button>
       </div>
     );
   }
 
+  // -------------------------------------------------------------------------
+  // Expanded terminal
+  // -------------------------------------------------------------------------
   return (
     <div className="fixed bottom-10 left-4 right-4 z-40">
       <div className="bg-slate-900 rounded-t-lg shadow-2xl border border-slate-700 border-b-0 overflow-hidden max-w-5xl mx-auto">
+        {/* Resize handle */}
+        <div
+          onMouseDown={handleDragStart}
+          className="h-1.5 cursor-ns-resize bg-slate-800 hover:bg-slate-600
+                     transition-colors flex items-center justify-center rounded-t-lg"
+          title="Drag to resize"
+        >
+          <div className="w-8 h-0.5 rounded-full bg-slate-600" />
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-slate-800 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <Terminal size={16} className="text-emerald-400" />
-            <span className="text-sm font-mono text-slate-300">Runtime Terminal</span>
+            <span className="text-sm font-mono text-slate-300">Execution Terminal</span>
             <span
               className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`}
               title={isConnected ? 'Connected' : 'Disconnected'}
@@ -140,6 +318,22 @@ export const TerminalPanel: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* View Results button */}
+            {executionReport && !isRunning && (
+              <button
+                onClick={() => setShowResults(!showResults)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors font-medium ${
+                  showResults
+                    ? 'bg-violet-600 hover:bg-violet-500 text-white'
+                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                }`}
+                title="View execution results"
+              >
+                <BarChart3 size={14} />
+                {showResults ? 'View Logs' : 'View Results'}
+              </button>
+            )}
+
             {/* Run/Stop button */}
             {!isRunning ? (
               <button
@@ -148,10 +342,14 @@ export const TerminalPanel: React.FC = () => {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600
                            hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed
                            text-white text-sm rounded transition-colors font-medium"
-                title={nodes.length === 0 ? 'Add nodes to canvas first' : 'Run system simulation'}
+                title={
+                  nodes.length === 0
+                    ? 'Add nodes to canvas first'
+                    : 'Execute workflow via Claude API'
+                }
               >
                 <Play size={14} />
-                Run System
+                Execute
               </button>
             ) : (
               <button
@@ -184,43 +382,97 @@ export const TerminalPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Log output area */}
-        <div className="h-48 overflow-y-auto p-3 font-mono text-sm bg-[#0d1117]">
-          {logs.length === 0 ? (
-            <div className="text-slate-500 text-center py-8">
-              <Terminal size={24} className="mx-auto mb-2 opacity-50" />
-              <p>No output yet.</p>
-              <p className="text-xs mt-1">Click "Run System" to start simulation.</p>
-            </div>
-          ) : (
-            logs.map((log) => (
-              <div
-                key={log.id}
-                className={`flex gap-2 py-0.5 hover:bg-slate-800/30 px-1 -mx-1 rounded ${
-                  log.stream === 'stderr' ? 'text-red-400' : 'text-slate-300'
-                }`}
-              >
-                <span className="text-slate-600 select-none shrink-0">
-                  [{formatTimestamp(log.timestamp)}]
-                </span>
-                <span className="whitespace-pre-wrap break-all">
-                  {log.output.startsWith('>') || log.output.startsWith('[') ? (
-                    <span className={log.output.includes('ERROR') || log.output.includes('WARN')
-                      ? log.output.includes('ERROR') ? 'text-red-400' : 'text-yellow-400'
-                      : log.output.startsWith('>') ? 'text-blue-400' : 'text-emerald-400'
-                    }>
-                      {log.output}
-                    </span>
-                  ) : (
-                    log.output
-                  )}
-                </span>
+        {/* Progress bar — visible while running */}
+        <TerminalProgressBar
+          currentPhase={currentPhase}
+          totalPhases={totalPhases}
+          phaseName={currentPhaseName}
+          isRunning={isRunning}
+        />
+
+        {/* Content area — either logs or results */}
+        {showResults && executionReport ? (
+          <ExecutionResultsPanel report={executionReport} height={contentHeight} />
+        ) : (
+          <div className="overflow-y-auto p-3 font-mono text-sm bg-[#0d1117]" style={{ height: contentHeight }}>
+            {logs.length === 0 ? (
+              <div className="text-slate-500 text-center py-8">
+                <Terminal size={24} className="mx-auto mb-2 opacity-50" />
+                <p>No output yet.</p>
+                <p className="text-xs mt-1">
+                  Click &quot;Execute&quot; to run agents via Claude API.
+                </p>
               </div>
-            ))
-          )}
-          <div ref={logsEndRef} />
-        </div>
+            ) : (
+              logs.map((log) => {
+                // Phase separator
+                if (log.type === 'phase-start' && log.phaseInfo) {
+                  return (
+                    <div
+                      key={log.id}
+                      className="my-2 flex items-center gap-2 px-2 py-1.5 bg-blue-900/30 border border-blue-800/40 rounded"
+                    >
+                      <span className="text-blue-400 text-xs font-bold">
+                        PHASE {log.phaseInfo.index}/{log.phaseInfo.total}
+                      </span>
+                      <span className="text-blue-300 text-xs font-medium">
+                        {log.phaseInfo.name}
+                      </span>
+                    </div>
+                  );
+                }
+
+                // Agent result block
+                if (log.type === 'agent-result' && log.agentResult) {
+                  return <AgentOutputBlock key={log.id} result={log.agentResult} />;
+                }
+
+                // Plain text log
+                return (
+                  <div
+                    key={log.id}
+                    className={`flex gap-2 py-0.5 hover:bg-slate-800/30 px-1 -mx-1 rounded ${
+                      log.stream === 'stderr' ? 'text-red-400' : 'text-slate-300'
+                    }`}
+                  >
+                    <span className="text-slate-600 select-none shrink-0">
+                      [{formatTimestamp(log.timestamp)}]
+                    </span>
+                    <span className="whitespace-pre-wrap break-all">
+                      {log.output.startsWith('>') || log.output.startsWith('[') ? (
+                        <span
+                          className={
+                            log.output.includes('ERROR') || log.output.includes('WARN')
+                              ? log.output.includes('ERROR')
+                                ? 'text-red-400'
+                                : 'text-yellow-400'
+                              : log.output.startsWith('>')
+                              ? 'text-blue-400'
+                              : 'text-emerald-400'
+                          }
+                        >
+                          {log.output}
+                        </span>
+                      ) : (
+                        log.output
+                      )}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+            <div ref={logsEndRef} />
+          </div>
+        )}
       </div>
+
+      {/* Prompt modal */}
+      <ExecutionPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        onExecute={handleExecuteWithBrief}
+        agentCount={nodes.length}
+      />
     </div>
   );
 };

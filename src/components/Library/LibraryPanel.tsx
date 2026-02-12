@@ -280,9 +280,12 @@ export const LibraryPanel = () => {
   const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
-  const { data: inventory, isLoading, error } = useQuery({
+  const { data: inventory, isLoading, error, refetch } = useQuery({
     queryKey: ['inventory'],
     queryFn: fetchInventory,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    refetchOnWindowFocus: true,
   });
 
   // Determine if we should use search mode
@@ -616,6 +619,12 @@ export const LibraryPanel = () => {
     <aside className="w-72 bg-white border-r border-slate-200 p-4 shrink-0 transition-all duration-200">
       <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg border border-red-200">
         Failed to load inventory. Is the server running?
+        <button
+          onClick={() => refetch()}
+          className="mt-2 w-full px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded text-xs font-medium transition-colors"
+        >
+          Retry
+        </button>
       </div>
     </aside>
   );
