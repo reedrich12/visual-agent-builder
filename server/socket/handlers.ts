@@ -10,7 +10,7 @@ import { Session } from '../types/session';
 import { createSupervisorAgent, SupervisorAgent } from '../agents/supervisor';
 import { canvas_sync_from_client, canvasState, persistLayout } from '../mcp/canvas-mcp';
 import { validateSystem } from '../services/runtime';
-import { executeWorkflow, stopExecution } from '../services/orchestrator-bridge';
+import { executeWorkflow, executeFixerAgent, stopExecution } from '../services/orchestrator-bridge';
 import { emitExecutionLog } from './emitter';
 
 // In-memory session store (will be replaced with proper store later)
@@ -301,6 +301,48 @@ export function setupSocketHandlers(io: TypedSocketServer): void {
     socket.on('system:stop' as any, (payload: any) => {
       const { sessionId } = payload;
       console.log(`[Socket] System stop requested for session: ${sessionId}`);
+      stopExecution(sessionId);
+    });
+
+    // Handle fixer:start — standalone Claude call for configuration fixes
+    socket.on('fixer:start' as any, async (payload: any) => {
+      const { sessionId, prompt } = payload;
+
+      if (!sessionId) {
+        socket.emit('error', {
+          code: 'INVALID_SESSION',
+          message: 'Session ID required to start fixer',
+        });
+        return;
+      }
+
+      if (!prompt) {
+        socket.emit('error', {
+          code: 'MISSING_PROMPT',
+          message: 'Fixer prompt is required',
+        });
+        return;
+      }
+
+      console.log(`[Socket] Fixer start requested for session: ${sessionId}`);
+
+      try {
+        await executeFixerAgent(sessionId, prompt);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        emitExecutionLog(sessionId, `Fixer error: ${errorMessage}`, 'stderr');
+        socket.emit('error', {
+          code: 'FIXER_ERROR',
+          message: `Fixer error: ${errorMessage}`,
+        });
+      }
+    });
+
+    // Handle fixer:stop — cancel fixer execution
+    socket.on('fixer:stop' as any, (payload: any) => {
+      const { sessionId } = payload;
+      console.log(`[Socket] Fixer stop requested for session: ${sessionId}`);
       stopExecution(sessionId);
     });
 

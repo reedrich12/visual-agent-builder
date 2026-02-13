@@ -298,6 +298,7 @@ export interface ExecuteCommandParams {
   command: string;
   cwd?: string;           // Relative to sandbox root, defaults to sandbox root
   sessionId?: string;     // For streaming output
+  source?: 'workflow' | 'fixer'; // Route output to correct terminal tab
 }
 
 export interface ExecuteCommandResult {
@@ -316,13 +317,28 @@ export async function sandbox_execute_command(
         ? validatePath(params.cwd)
         : SANDBOX_ROOT;
 
+      // Reject commands with absolute paths outside the sandbox
+      const absolutePathPattern = /(?:^|\s|["'=])(\/(?!dev\/null)[^\s"']*)/g;
+      let match;
+      while ((match = absolutePathPattern.exec(params.command)) !== null) {
+        const absPath = match[1];
+        if (!absPath.startsWith(SANDBOX_ROOT)) {
+          resolve({
+            success: false,
+            error: `Blocked: command references absolute path outside sandbox: ${absPath}. Use relative paths instead.`,
+            data: { exitCode: -1, stdout: '', stderr: '' },
+          });
+          return;
+        }
+      }
+
       // Set session ID for streaming
       const sessionId = params.sessionId || currentSessionId;
 
-      // Spawn child process
+      // Spawn child process — cwd is always within sandbox
       const child = spawn('sh', ['-c', params.command], {
         cwd: workDir,
-        env: { ...process.env },
+        env: { ...process.env, HOME: SANDBOX_ROOT },
       });
 
       let stdout = '';
@@ -335,7 +351,7 @@ export async function sandbox_execute_command(
 
         // Stream to socket if session ID is available
         if (sessionId) {
-          emitExecutionLog(sessionId, output, 'stdout');
+          emitExecutionLog(sessionId, output, 'stdout', params.source);
         }
       });
 
@@ -346,7 +362,7 @@ export async function sandbox_execute_command(
 
         // Stream to socket if session ID is available
         if (sessionId) {
-          emitExecutionLog(sessionId, output, 'stderr');
+          emitExecutionLog(sessionId, output, 'stderr', params.source);
         }
       });
 

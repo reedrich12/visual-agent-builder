@@ -94,6 +94,7 @@ export interface ExecutionLogPayload {
   output: string;
   stream: 'stdout' | 'stderr';
   timestamp: number;
+  source?: 'workflow' | 'fixer';
 }
 
 export interface AgentResultPayload {
@@ -181,6 +182,10 @@ export interface ClientToServerEvents {
   // Phase 6: Runtime control
   'system:start': (payload: { sessionId: string; nodes: unknown[]; edges: unknown[]; brief: string }) => void;
   'system:stop': (payload: { sessionId: string }) => void;
+
+  // Fixer: standalone Claude call for configuration fixes
+  'fixer:start': (payload: { sessionId: string; prompt: string }) => void;
+  'fixer:stop': (payload: { sessionId: string }) => void;
 }
 
 // -----------------------------------------------------------------------------

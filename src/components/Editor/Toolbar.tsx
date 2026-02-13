@@ -12,6 +12,7 @@ import {
   Save,
   Eye,
   BookOpen,
+  Settings2,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { generateWorkflowJson, downloadFile } from '../../utils/export';
@@ -19,6 +20,7 @@ import { generateDirectoryExport } from '../../utils/exportDirectory';
 import { generateClaudeMdExecutable } from '../../utils/generateClaudeMdExecutable';
 import { downloadAsZip, generateDirectoryTree } from '../../utils/zipGenerator';
 import { ExportDialog } from '../../features/export-import/components/ExportDialog';
+import { ConfigureWizardModal } from '../ConfigureWizard/ConfigureWizardModal';
 
 interface ToolbarProps {
   reactFlowInstance?: ReactFlowInstance | null;
@@ -30,6 +32,7 @@ export const Toolbar = ({ reactFlowInstance, onImportClick }: ToolbarProps = {})
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showConfigureWizard, setShowConfigureWizard] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -109,6 +112,16 @@ export const Toolbar = ({ reactFlowInstance, onImportClick }: ToolbarProps = {})
           >
             <Play size={14} fill="currentColor" />
             <span>Run</span>
+          </button>
+
+          {/* Configure Button */}
+          <button
+            onClick={() => setShowConfigureWizard(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:from-violet-600 hover:to-purple-700 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+            title="AI-powered configuration wizard"
+          >
+            <Settings2 size={14} />
+            <span>Configure</span>
           </button>
 
           <div className="w-px h-7 bg-slate-200 mx-1" />
@@ -245,6 +258,12 @@ export const Toolbar = ({ reactFlowInstance, onImportClick }: ToolbarProps = {})
         isOpen={showSaveDialog}
         onClose={() => setShowSaveDialog(false)}
         reactFlowInstance={reactFlowInstance || null}
+      />
+
+      {/* Configure Wizard Modal */}
+      <ConfigureWizardModal
+        isOpen={showConfigureWizard}
+        onClose={() => setShowConfigureWizard(false)}
       />
 
       {/* Directory Structure Preview Modal */}

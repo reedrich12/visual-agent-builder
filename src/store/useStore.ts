@@ -16,6 +16,31 @@ import { EdgeType } from '../types/core';
 import { WorkflowConfig, DEFAULT_WORKFLOW_CONFIG } from '../types/config';
 import { needsMigration, migrateWorkflow } from '../utils/workflowMigration';
 import { getEdgeParams } from '../config/edgeConfig';
+import type {
+  ConfigurePhase,
+  ConfigureNodeStatus,
+  WorkflowAnalysis,
+  ConfigSuggestion,
+  MissingRequirement,
+} from '../../shared/configure-types';
+
+// Configure wizard cached state
+export interface ConfigureNodeStep {
+  id: string;
+  label: string;
+  type: string;
+  config: Record<string, unknown>;
+  status: ConfigureNodeStatus;
+}
+
+export interface ConfigureWizardCache {
+  phase: ConfigurePhase;
+  workflowAnalysis: WorkflowAnalysis | null;
+  nodeSteps: ConfigureNodeStep[];
+  currentIndex: number;
+  suggestions: Map<string, ConfigSuggestion>;
+  allMissingRequirements: MissingRequirement[];
+}
 
 // Re-export WorkflowConfig for backwards compatibility
 export type { WorkflowConfig } from '../types/config';
@@ -89,6 +114,12 @@ interface StoreState {
   getChildNodes: (parentId: string) => Node[];
   // Edge type helper
   setEdgeType: (edgeId: string, edgeType: EdgeType) => void;
+  // Configure wizard cache
+  configureWizardCache: ConfigureWizardCache | null;
+  setConfigureWizardCache: (cache: ConfigureWizardCache | null) => void;
+  // Fixer running state (shared between SummaryView and TerminalPanel)
+  isFixerRunning: boolean;
+  setFixerRunning: (running: boolean) => void;
 }
 
 const useStore = create<StoreState>((set, get) => ({
@@ -104,6 +135,8 @@ const useStore = create<StoreState>((set, get) => ({
   libraryViewMode: 'type' as LibraryViewMode,
   isLibraryPanelCollapsed: false,
   isPropertiesPanelCollapsed: false,
+  configureWizardCache: null,
+  isFixerRunning: false,
 
   onNodesChange: (changes: NodeChange[]) => {
     set({
@@ -225,6 +258,10 @@ const useStore = create<StoreState>((set, get) => ({
   setPropertiesPanelCollapsed: (collapsed) => set({ isPropertiesPanelCollapsed: collapsed }),
   toggleLibraryPanel: () => set({ isLibraryPanelCollapsed: !get().isLibraryPanelCollapsed }),
   togglePropertiesPanel: () => set({ isPropertiesPanelCollapsed: !get().isPropertiesPanelCollapsed }),
+
+  // Configure wizard cache
+  setConfigureWizardCache: (cache) => set({ configureWizardCache: cache }),
+  setFixerRunning: (running) => set({ isFixerRunning: running }),
 
   // Hierarchy helpers for container nodes (Department, Agent Pool)
   addChildNode: (parentId, node) => {

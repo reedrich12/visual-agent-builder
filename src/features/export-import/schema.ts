@@ -447,7 +447,7 @@ export const ConnectionSchema = z.object({
 // =============================================================================
 
 export const ModelConfigSchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'azure', 'ollama', 'custom']),
+  provider: z.enum(['anthropic', 'openai', 'google', 'azure', 'xai', 'ollama', 'openrouter', 'custom']),
   model: z.string(),
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().min(1),

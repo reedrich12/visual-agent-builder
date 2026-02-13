@@ -115,13 +115,15 @@ export function emitPlanComplete(
 export function emitExecutionLog(
   sessionId: string,
   output: string,
-  stream: 'stdout' | 'stderr' = 'stdout'
+  stream: 'stdout' | 'stderr' = 'stdout',
+  source?: 'workflow' | 'fixer'
 ): void {
   getSocketServer().emit('execution:log', {
     sessionId,
     output,
     stream,
     timestamp: Date.now(),
+    source,
   });
 }
 

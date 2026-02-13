@@ -39,6 +39,8 @@ interface LogEntry {
   agentResult?: AgentResultPayload;
 }
 
+type TerminalTab = 'workflow' | 'fixer';
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -55,6 +57,11 @@ export const TerminalPanel: React.FC = () => {
   const [currentPhase, setCurrentPhase] = useState(0);
   const [totalPhases, setTotalPhases] = useState(0);
   const [currentPhaseName, setCurrentPhaseName] = useState('');
+
+  // Fixer tab state
+  const [activeTab, setActiveTab] = useState<TerminalTab>('workflow');
+  const [fixerLogs, setFixerLogs] = useState<LogEntry[]>([]);
+  const { isFixerRunning, setFixerRunning } = useStore();
 
   // Resizable height state
   const [contentHeight, setContentHeight] = useState(256); // default h-64 = 256px
@@ -111,6 +118,7 @@ export const TerminalPanel: React.FC = () => {
       output: string;
       stream?: 'stdout' | 'stderr';
       timestamp?: number;
+      source?: 'workflow' | 'fixer';
     }) => {
       const entry: LogEntry = {
         id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -119,18 +127,36 @@ export const TerminalPanel: React.FC = () => {
         stream: payload.stream || 'stdout',
         type: 'text',
       };
-      setLogs((prev) => [...prev, entry]);
-      setIsExpanded(true);
 
-      // Detect execution completion or cancellation (fallback if report event doesn't fire)
-      if (
-        payload.output.includes('completed successfully') ||
-        payload.output.includes('completed with warnings') ||
-        payload.output.includes('FAILED') ||
-        payload.output.includes('Execution cancelled') ||
-        payload.output.includes('Validation failed')
-      ) {
-        setIsRunning(false);
+      // Route logs based on source tag
+      if (payload.source === 'fixer') {
+        setFixerLogs((prev) => [...prev, entry]);
+        // Auto-switch to fixer tab and expand
+        setActiveTab('fixer');
+        setIsExpanded(true);
+
+        // Detect fixer completion
+        if (
+          payload.output.includes('Fixer completed') ||
+          payload.output.includes('Fixer failed') ||
+          payload.output.includes('Fixer error')
+        ) {
+          setFixerRunning(false);
+        }
+      } else {
+        setLogs((prev) => [...prev, entry]);
+        setIsExpanded(true);
+
+        // Detect workflow execution completion or cancellation
+        if (
+          payload.output.includes('completed successfully') ||
+          payload.output.includes('completed with warnings') ||
+          payload.output.includes('FAILED') ||
+          payload.output.includes('Execution cancelled') ||
+          payload.output.includes('Validation failed')
+        ) {
+          setIsRunning(false);
+        }
       }
     };
 
@@ -212,10 +238,14 @@ export const TerminalPanel: React.FC = () => {
   }, [socket, sessionId]);
 
   const handleClear = useCallback(() => {
-    setLogs([]);
-    setExecutionReport(null);
-    setShowResults(false);
-  }, []);
+    if (activeTab === 'fixer') {
+      setFixerLogs([]);
+    } else {
+      setLogs([]);
+      setExecutionReport(null);
+      setShowResults(false);
+    }
+  }, [activeTab]);
 
   const formatTimestamp = (ts: number) => {
     const date = new Date(ts);
@@ -277,12 +307,12 @@ export const TerminalPanel: React.FC = () => {
           <Terminal size={16} className="text-emerald-400" />
           <span className="text-sm font-mono">Terminal</span>
           <ChevronUp size={16} />
-          {logs.length > 0 && (
+          {(logs.length > 0 || fixerLogs.length > 0) && (
             <span className="ml-2 px-2 py-0.5 bg-emerald-900/50 text-emerald-400 rounded text-xs font-mono">
-              {logs.length}
+              {logs.length + fixerLogs.length}
             </span>
           )}
-          {isRunning && (
+          {(isRunning || isFixerRunning) && (
             <span className="ml-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           )}
         </button>
@@ -310,7 +340,44 @@ export const TerminalPanel: React.FC = () => {
         <div className="flex items-center justify-between px-4 py-2 bg-slate-800 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <Terminal size={16} className="text-emerald-400" />
-            <span className="text-sm font-mono text-slate-300">Execution Terminal</span>
+            {/* Tab switcher */}
+            <div className="flex items-center bg-slate-900/60 rounded-lg p-0.5">
+              <button
+                onClick={() => setActiveTab('workflow')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  activeTab === 'workflow'
+                    ? 'bg-slate-700 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Workflow
+                {logs.length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-slate-600/50 text-slate-300 rounded text-[10px]">
+                    {logs.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('fixer')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  activeTab === 'fixer'
+                    ? 'bg-violet-600/80 text-white'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Fixer
+                {fixerLogs.length > 0 && (
+                  <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${
+                    activeTab === 'fixer' ? 'bg-violet-500/50 text-violet-100' : 'bg-slate-600/50 text-slate-300'
+                  }`}>
+                    {fixerLogs.length}
+                  </span>
+                )}
+                {isFixerRunning && (
+                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse inline-block" />
+                )}
+              </button>
+            </div>
             <span
               className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`}
               title={isConnected ? 'Connected' : 'Disconnected'}
@@ -318,8 +385,8 @@ export const TerminalPanel: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Results button */}
-            {executionReport && !isRunning && (
+            {/* View Results button (workflow tab only) */}
+            {activeTab === 'workflow' && executionReport && !isRunning && (
               <button
                 onClick={() => setShowResults(!showResults)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors font-medium ${
@@ -334,31 +401,50 @@ export const TerminalPanel: React.FC = () => {
               </button>
             )}
 
-            {/* Run/Stop button */}
-            {!isRunning ? (
+            {/* Workflow tab: Run/Stop button */}
+            {activeTab === 'workflow' && (
+              !isRunning ? (
+                <button
+                  onClick={handleRun}
+                  disabled={!isConnected || nodes.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600
+                             hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed
+                             text-white text-sm rounded transition-colors font-medium"
+                  title={
+                    nodes.length === 0
+                      ? 'Add nodes to canvas first'
+                      : 'Execute workflow via Claude API'
+                  }
+                >
+                  <Play size={14} />
+                  Execute
+                </button>
+              ) : (
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600
+                             hover:bg-red-500 text-white text-sm rounded transition-colors font-medium"
+                >
+                  <Square size={14} />
+                  Stop
+                </button>
+              )
+            )}
+
+            {/* Fixer tab: Stop button when running */}
+            {activeTab === 'fixer' && isFixerRunning && (
               <button
-                onClick={handleRun}
-                disabled={!isConnected || nodes.length === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600
-                           hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed
-                           text-white text-sm rounded transition-colors font-medium"
-                title={
-                  nodes.length === 0
-                    ? 'Add nodes to canvas first'
-                    : 'Execute workflow via Claude API'
-                }
-              >
-                <Play size={14} />
-                Execute
-              </button>
-            ) : (
-              <button
-                onClick={handleStop}
+                onClick={() => {
+                  setFixerRunning(false);
+                  if (socket && sessionId) {
+                    socket.emit('fixer:stop', { sessionId });
+                  }
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600
                            hover:bg-red-500 text-white text-sm rounded transition-colors font-medium"
               >
                 <Square size={14} />
-                Stop
+                Stop Fixer
               </button>
             )}
 
@@ -382,53 +468,33 @@ export const TerminalPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Progress bar — visible while running */}
-        <TerminalProgressBar
-          currentPhase={currentPhase}
-          totalPhases={totalPhases}
-          phaseName={currentPhaseName}
-          isRunning={isRunning}
-        />
+        {/* Progress bar — visible while running workflow (not shown for fixer tab) */}
+        {activeTab === 'workflow' && (
+          <TerminalProgressBar
+            currentPhase={currentPhase}
+            totalPhases={totalPhases}
+            phaseName={currentPhaseName}
+            isRunning={isRunning}
+          />
+        )}
 
-        {/* Content area — either logs or results */}
-        {showResults && executionReport ? (
+        {/* Content area — either logs, results, or fixer output */}
+        {activeTab === 'workflow' && showResults && executionReport ? (
           <ExecutionResultsPanel report={executionReport} height={contentHeight} />
         ) : (
           <div className="overflow-y-auto p-3 font-mono text-sm bg-[#0d1117]" style={{ height: contentHeight }}>
-            {logs.length === 0 ? (
-              <div className="text-slate-500 text-center py-8">
-                <Terminal size={24} className="mx-auto mb-2 opacity-50" />
-                <p>No output yet.</p>
-                <p className="text-xs mt-1">
-                  Click &quot;Execute&quot; to run agents via Claude API.
-                </p>
-              </div>
-            ) : (
-              logs.map((log) => {
-                // Phase separator
-                if (log.type === 'phase-start' && log.phaseInfo) {
-                  return (
-                    <div
-                      key={log.id}
-                      className="my-2 flex items-center gap-2 px-2 py-1.5 bg-blue-900/30 border border-blue-800/40 rounded"
-                    >
-                      <span className="text-blue-400 text-xs font-bold">
-                        PHASE {log.phaseInfo.index}/{log.phaseInfo.total}
-                      </span>
-                      <span className="text-blue-300 text-xs font-medium">
-                        {log.phaseInfo.name}
-                      </span>
-                    </div>
-                  );
-                }
-
-                // Agent result block
-                if (log.type === 'agent-result' && log.agentResult) {
-                  return <AgentOutputBlock key={log.id} result={log.agentResult} />;
-                }
-
-                // Plain text log
-                return (
+            {activeTab === 'fixer' ? (
+              /* --- Fixer tab content --- */
+              fixerLogs.length === 0 ? (
+                <div className="text-slate-500 text-center py-8">
+                  <Terminal size={24} className="mx-auto mb-2 opacity-50" />
+                  <p>No fixer output yet.</p>
+                  <p className="text-xs mt-1">
+                    Use the &quot;Open Fixer&quot; button in the Configure wizard to launch.
+                  </p>
+                </div>
+              ) : (
+                fixerLogs.map((log) => (
                   <div
                     key={log.id}
                     className={`flex gap-2 py-0.5 hover:bg-slate-800/30 px-1 -mx-1 rounded ${
@@ -447,8 +513,8 @@ export const TerminalPanel: React.FC = () => {
                                 ? 'text-red-400'
                                 : 'text-yellow-400'
                               : log.output.startsWith('>')
-                              ? 'text-blue-400'
-                              : 'text-emerald-400'
+                              ? 'text-violet-400'
+                              : 'text-violet-300'
                           }
                         >
                           {log.output}
@@ -458,8 +524,76 @@ export const TerminalPanel: React.FC = () => {
                       )}
                     </span>
                   </div>
-                );
-              })
+                ))
+              )
+            ) : (
+              /* --- Workflow tab content --- */
+              logs.length === 0 ? (
+                <div className="text-slate-500 text-center py-8">
+                  <Terminal size={24} className="mx-auto mb-2 opacity-50" />
+                  <p>No output yet.</p>
+                  <p className="text-xs mt-1">
+                    Click &quot;Execute&quot; to run agents via Claude API.
+                  </p>
+                </div>
+              ) : (
+                logs.map((log) => {
+                  // Phase separator
+                  if (log.type === 'phase-start' && log.phaseInfo) {
+                    return (
+                      <div
+                        key={log.id}
+                        className="my-2 flex items-center gap-2 px-2 py-1.5 bg-blue-900/30 border border-blue-800/40 rounded"
+                      >
+                        <span className="text-blue-400 text-xs font-bold">
+                          PHASE {log.phaseInfo.index}/{log.phaseInfo.total}
+                        </span>
+                        <span className="text-blue-300 text-xs font-medium">
+                          {log.phaseInfo.name}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // Agent result block
+                  if (log.type === 'agent-result' && log.agentResult) {
+                    return <AgentOutputBlock key={log.id} result={log.agentResult} />;
+                  }
+
+                  // Plain text log
+                  return (
+                    <div
+                      key={log.id}
+                      className={`flex gap-2 py-0.5 hover:bg-slate-800/30 px-1 -mx-1 rounded ${
+                        log.stream === 'stderr' ? 'text-red-400' : 'text-slate-300'
+                      }`}
+                    >
+                      <span className="text-slate-600 select-none shrink-0">
+                        [{formatTimestamp(log.timestamp)}]
+                      </span>
+                      <span className="whitespace-pre-wrap break-all">
+                        {log.output.startsWith('>') || log.output.startsWith('[') ? (
+                          <span
+                            className={
+                              log.output.includes('ERROR') || log.output.includes('WARN')
+                                ? log.output.includes('ERROR')
+                                  ? 'text-red-400'
+                                  : 'text-yellow-400'
+                                : log.output.startsWith('>')
+                                ? 'text-blue-400'
+                                : 'text-emerald-400'
+                            }
+                          >
+                            {log.output}
+                          </span>
+                        ) : (
+                          log.output
+                        )}
+                      </span>
+                    </div>
+                  );
+                })
+              )
             )}
             <div ref={logsEndRef} />
           </div>

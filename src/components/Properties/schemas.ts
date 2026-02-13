@@ -133,11 +133,15 @@ export const providerOptions = [
 
 export const modelsByProvider: Record<string, { label: string; value: string }[]> = {
   anthropic: [
+    { label: 'Claude Opus 4.6', value: 'claude-opus-4-6' },
+    { label: 'Claude Sonnet 4.5', value: 'claude-sonnet-4-5-20250929' },
+    { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
+    { label: 'Claude Opus 4.5', value: 'claude-opus-4-5-20251101' },
+    { label: 'Claude Opus 4.1', value: 'claude-opus-4-1-20250805' },
     { label: 'Claude Sonnet 4', value: 'claude-sonnet-4-20250514' },
     { label: 'Claude Opus 4', value: 'claude-opus-4-20250514' },
-    { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20241022' },
-    { label: 'Claude 3.5 Haiku', value: 'claude-3-5-haiku-20241022' },
-    { label: 'Claude 3 Opus', value: 'claude-3-opus-20240229' },
+    { label: 'Claude Sonnet 3.7', value: 'claude-3-7-sonnet-20250219' },
+    { label: 'Claude Haiku 3.5', value: 'claude-3-5-haiku-20241022' },
   ],
   openai: [
     { label: 'GPT-4o', value: 'gpt-4o' },
@@ -146,6 +150,9 @@ export const modelsByProvider: Record<string, { label: string; value: string }[]
     { label: 'O3 Mini', value: 'o3-mini' },
   ],
   google: [
+    { label: 'Gemini 3 Pro', value: 'gemini-3-pro-preview' },
+    { label: 'Gemini 3 Flash', value: 'gemini-3-flash-preview' },
+    { label: 'Gemini 3 Pro Image', value: 'gemini-3-pro-image-preview' },
     { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
     { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
     { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
@@ -156,7 +163,9 @@ export const modelsByProvider: Record<string, { label: string; value: string }[]
   ],
   openrouter: [
     { label: 'Auto (Best Available)', value: 'auto' },
-    { label: 'Claude 3.5 Sonnet', value: 'anthropic/claude-3.5-sonnet' },
+    { label: 'Claude Opus 4.6', value: 'anthropic/claude-opus-4-6' },
+    { label: 'Claude Sonnet 4.5', value: 'anthropic/claude-sonnet-4-5' },
+    { label: 'Gemini 3 Pro', value: 'google/gemini-3-pro-preview' },
     { label: 'GPT-4o', value: 'openai/gpt-4o' },
   ],
   xai: [
@@ -537,7 +546,7 @@ export const nodeSchemas: Record<NodeType, NodeTypeSchema> = {
         section: 'model',
         options: modelsByProvider['anthropic'],
         dependsOn: 'provider',
-        defaultValue: 'claude-3-5-sonnet-20241022',
+        defaultValue: 'claude-sonnet-4-5-20250929',
       },
       {
         key: 'temperature',

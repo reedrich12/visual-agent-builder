@@ -54,7 +54,7 @@ export interface FrameworkOptions {
 // Model Configuration
 // =============================================================================
 
-export type ModelProvider = 'anthropic' | 'openai' | 'azure' | 'ollama' | 'custom';
+export type ModelProvider = 'anthropic' | 'openai' | 'google' | 'azure' | 'xai' | 'ollama' | 'openrouter' | 'custom';
 
 export interface ModelConfig {
   provider: ModelProvider;
@@ -138,7 +138,7 @@ export const DEFAULT_FRAMEWORK_OPTIONS: FrameworkOptions = {
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: 'anthropic',
-  model: 'claude-sonnet-4-20250514',
+  model: 'claude-sonnet-4-5-20250929',
   temperature: 0.5,
   maxTokens: 4096,
 };

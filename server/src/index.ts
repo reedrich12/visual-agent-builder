@@ -28,6 +28,7 @@ import { startSkillWatcher, capabilityRegistry } from '../watcher/skill-watcher'
 import { createSupervisorAgent } from '../agents/supervisor';
 import { getSession } from '../socket/handlers';
 import { getPoolStatus } from '../lib/anthropic-client';
+import { analyzeWorkflow, analyzeNodeConfig } from '../services/configuration-analyzer';
 
 const app = express();
 const httpServer = createServer(app);
@@ -216,6 +217,59 @@ app.post('/api/chat', async (req, res) => {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+});
+
+// Configuration wizard endpoints
+app.post('/api/configure-workflow', async (req, res) => {
+  try {
+    const { nodes, edges } = req.body;
+    if (!nodes || !edges) {
+      return res.status(400).json({ error: 'nodes and edges are required' });
+    }
+    const analysis = analyzeWorkflow(nodes, edges);
+    res.json(analysis);
+  } catch (error) {
+    console.error('[Configure] Workflow scan error:', error);
+    res.status(500).json({ error: 'Failed to analyze workflow' });
+  }
+});
+
+app.post('/api/configure-node', async (req, res) => {
+  try {
+    const { node, workflowContext } = req.body;
+    if (!node) {
+      return res.status(400).json({ error: 'node is required' });
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const suggestion = await analyzeNodeConfig(
+      node,
+      workflowContext || { nodeCount: 1, edgeCount: 0, connectedNodes: [], workflowName: 'Workflow' },
+      (chunk: string) => {
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+      }
+    );
+
+    // Send final result
+    res.write(`data: ${JSON.stringify({ type: 'result', suggestion })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error) {
+    console.error('[Configure] Node analysis error:', error);
+    // If headers already sent (streaming started), send error as SSE
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: error instanceof Error ? error.message : 'Unknown error' })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } else {
+      res.status(500).json({ error: 'Failed to analyze node configuration' });
+    }
   }
 });
 

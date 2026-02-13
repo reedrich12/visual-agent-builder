@@ -13,6 +13,7 @@ import {
   emitAgentResult,
   emitExecutionReport,
 } from '../socket/emitter';
+import { SANDBOX_TOOLS } from '../mcp/sandbox-mcp';
 
 // ---------------------------------------------------------------------------
 // Types — mirrored from agent-orchestrator/orchestrator/src/workflow/parser.ts
@@ -316,7 +317,7 @@ async function runAgent(
   abortSignal?: AbortSignal
 ): Promise<AgentResult> {
   const config = agent.config;
-  const model = (config.model as string) || 'claude-sonnet-4-20250514';
+  const model = (config.model as string) || 'claude-sonnet-4-5-20250929';
   const maxTokens = (config.maxTokens as number) || 4096;
   const temperature = (config.temperature as number) || 0.5;
   const systemPrompt =
@@ -448,6 +449,217 @@ export function stopExecution(sessionId: string): void {
     controller.abort();
     activeExecutions.delete(sessionId);
     emitExecutionLog(sessionId, '[SYSTEM] Execution cancelled by user');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Standalone Fixer Agent — agentic tool-use loop for configuration fixes
+// ---------------------------------------------------------------------------
+
+const FIXER_SYSTEM_PROMPT = `You are a configuration fixer agent with access to sandbox tools.
+You can create files, directories, execute commands, and read files in the sandbox environment.
+
+IMPORTANT: All file paths must be RELATIVE to the sandbox root. Never use absolute paths.
+- Correct: "config/settings.json", "agents/my-agent.md", ".claude/hooks/pre-commit.json"
+- Wrong: "/Users/someone/Desktop/project/config/settings.json"
+
+For sandbox_execute_command: use relative paths only. The working directory is already the sandbox root.
+
+For auto-fixable items: USE YOUR TOOLS to actually create the files, directories, and configs. Do not just output instructions — execute the fixes directly.
+
+For manual items (like obtaining API keys): Provide clear instructions the user can follow.
+
+Work through each requirement systematically. After completing each fix, verify it worked by reading the file or listing the directory.
+
+Be concise in your text output. Focus on executing fixes, not explaining what you would do.`;
+
+/**
+ * Execute the fixer agent with a compiled prompt.
+ * Runs as an agentic tool-use loop with sandbox tools — NOT through the multi-agent orchestrator.
+ * Claude can create files, directories, run commands, and verify fixes.
+ * Streams output to the terminal via execution:log events.
+ */
+export async function executeFixerAgent(
+  sessionId: string,
+  prompt: string
+): Promise<void> {
+  const log = (msg: string, stream: 'stdout' | 'stderr' = 'stdout') =>
+    emitExecutionLog(sessionId, msg, stream, 'fixer');
+
+  // Check for API key
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    log('═'.repeat(60), 'stderr');
+    log('ERROR: ANTHROPIC_API_KEY not set', 'stderr');
+    log('', 'stderr');
+    log('To run the fixer, set your API key:', 'stderr');
+    log('  1. Create server/.env file', 'stderr');
+    log('  2. Add: ANTHROPIC_API_KEY=sk-ant-...', 'stderr');
+    log('  3. Restart the server', 'stderr');
+    log('═'.repeat(60), 'stderr');
+    throw new Error('ANTHROPIC_API_KEY not configured');
+  }
+
+  // Set up abort controller
+  const abortController = new AbortController();
+  activeExecutions.set(sessionId, abortController);
+
+  const startTime = Date.now();
+
+  try {
+    log('═'.repeat(60));
+    log('CONFIGURATION FIXER — Agentic Tool-Use Loop');
+    log('═'.repeat(60));
+    log('');
+    log('[INIT] Starting fixer agent with sandbox tools (claude-sonnet-4-5-20250929)...');
+    log('');
+
+    const client = new Anthropic({ apiKey });
+    const model = 'claude-sonnet-4-5-20250929';
+
+    // Build Anthropic tool definitions from SANDBOX_TOOLS
+    const tools: Anthropic.Tool[] = Object.values(SANDBOX_TOOLS).map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.parameters as Anthropic.Tool.InputSchema,
+    }));
+
+    const messages: Anthropic.MessageParam[] = [
+      { role: 'user', content: prompt },
+    ];
+
+    let iteration = 0;
+    const MAX_ITERATIONS = 25;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
+    // Agentic loop
+    while (iteration < MAX_ITERATIONS) {
+      iteration++;
+
+      if (abortController.signal.aborted) {
+        log('[CANCELLED] Fixer stopped by user');
+        break;
+      }
+
+      log(`[ITERATION ${iteration}/${MAX_ITERATIONS}]`);
+
+      // Per-iteration timeout (2 minutes) to prevent hanging
+      const iterationTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('API call timed out after 2 minutes')), 120_000)
+      );
+
+      const response = await Promise.race([
+        client.messages.create({
+          model,
+          max_tokens: 8192,
+          temperature: 0.3,
+          system: FIXER_SYSTEM_PROMPT,
+          tools,
+          messages,
+        }),
+        iterationTimeout,
+      ]);
+
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
+
+      // Process content blocks
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const block of response.content) {
+        if (abortController.signal.aborted) break;
+
+        if (block.type === 'text') {
+          // Stream text to terminal line by line
+          for (const line of block.text.split('\n')) {
+            log(line);
+          }
+        } else if (block.type === 'tool_use') {
+          const inputPreview = JSON.stringify(block.input);
+          const truncated = inputPreview.length > 120
+            ? inputPreview.slice(0, 120) + '...'
+            : inputPreview;
+          log(`[TOOL] ${block.name}(${truncated})`);
+
+          // Look up the tool handler
+          const toolDef = SANDBOX_TOOLS[block.name as keyof typeof SANDBOX_TOOLS];
+          if (!toolDef) {
+            log(`[TOOL] ✗ Unknown tool: ${block.name}`, 'stderr');
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify({ success: false, error: `Unknown tool: ${block.name}` }),
+            });
+            continue;
+          }
+
+          // Inject sessionId and source for command execution so output routes to Fixer tab
+          const input = { ...(block.input as Record<string, unknown>) };
+          if (block.name === 'sandbox_execute_command') {
+            input.sessionId = sessionId;
+            input.source = 'fixer';
+          }
+
+          try {
+            const result = await toolDef.handler(input as any);
+
+            if (result.success) {
+              log(`[TOOL] ✓ ${block.name} succeeded`);
+            } else {
+              log(`[TOOL] ✗ ${block.name} failed: ${result.error}`, 'stderr');
+            }
+
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify(result),
+            });
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            log(`[TOOL] ✗ ${block.name} threw: ${errMsg}`, 'stderr');
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify({ success: false, error: errMsg }),
+            });
+          }
+        }
+      }
+
+      // If stop_reason is not tool_use, the agent is done
+      if (response.stop_reason !== 'tool_use') {
+        break;
+      }
+
+      // Append assistant response + tool results for next iteration
+      messages.push({ role: 'assistant', content: response.content });
+      messages.push({ role: 'user', content: toolResults });
+    }
+
+    if (iteration >= MAX_ITERATIONS) {
+      log(`[WARN] Fixer reached maximum iteration limit (${MAX_ITERATIONS})`, 'stderr');
+    }
+
+    // Final summary with cumulative stats
+    const durationMs = Date.now() - startTime;
+    const cost =
+      (totalInputTokens / 1_000_000) * 3 +
+      (totalOutputTokens / 1_000_000) * 15;
+
+    log('');
+    log('═'.repeat(60));
+    log(`> Fixer completed in ${iteration} iteration(s)`);
+    log(`> Duration: ${(durationMs / 1000).toFixed(1)}s`);
+    log(`> Cost: $${cost.toFixed(4)}`);
+    log(`> Tokens: ${totalInputTokens} input, ${totalOutputTokens} output`);
+    log('═'.repeat(60));
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    log(`[ERROR] Fixer failed: ${errorMessage}`, 'stderr');
+    throw err;
+  } finally {
+    activeExecutions.delete(sessionId);
   }
 }
 
